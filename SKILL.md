@@ -12,7 +12,7 @@ Computes the **CRAP** (Change Risk Anti-Pattern) score for every TypeScript Func
 From a TypeScript project root:
 
 ```bash
-npm install -g crap-ts
+npm install -g @mquesada02/crap-ts
 crap-ts
 ```
 

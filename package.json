@@ -1,15 +1,32 @@
 {
-  "name": "crap-ts",
-  "version": "0.0.0",
-  "description": "CRAP scores for TypeScript functions",
+  "name": "@mquesada02/crap-ts",
+  "version": "0.1.0",
+  "description": "CRAP (Change Risk Anti-Pattern) scores for TypeScript Functions",
   "type": "module",
   "bin": {
     "crap-ts": "dist/bin.js"
   },
+  "files": [
+    "dist",
+    "SKILL.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mquesada02/crap-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mquesada02/crap-ts/issues"
+  },
+  "homepage": "https://github.com/mquesada02/crap-ts#readme",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
   },
   "packageManager": "pnpm@10.14.0",
   "engines": {

@@ -7,7 +7,7 @@ Combines cyclomatic complexity with test Coverage to identify Functions that are
 ## Install
 
 ```bash
-npm install -g crap-ts
+npm install -g @mquesada02/crap-ts
 ```
 
 From this repository:

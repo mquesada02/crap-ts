@@ -1,6 +1,6 @@
 {
   "name": "@mquesada02/crap-ts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CRAP (Change Risk Anti-Pattern) scores for TypeScript Functions",
   "type": "module",
   "bin": {

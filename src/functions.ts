@@ -128,33 +128,34 @@ function complexityOf(root: ts.Node): number {
   return complexity;
 }
 
+const DECISION_STATEMENT_KINDS = new Set([
+  ts.SyntaxKind.IfStatement,
+  ts.SyntaxKind.ForStatement,
+  ts.SyntaxKind.ForInStatement,
+  ts.SyntaxKind.ForOfStatement,
+  ts.SyntaxKind.WhileStatement,
+  ts.SyntaxKind.DoStatement,
+  ts.SyntaxKind.CaseClause,
+  ts.SyntaxKind.DefaultClause,
+  ts.SyntaxKind.CatchClause,
+  ts.SyntaxKind.ConditionalExpression,
+]);
+
+const LOGICAL_OPERATORS = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+  ts.SyntaxKind.BarBarEqualsToken,
+  ts.SyntaxKind.QuestionQuestionEqualsToken,
+]);
+
 function isDecisionPoint(node: ts.Node): boolean {
-  if (
-    ts.isIfStatement(node) ||
-    ts.isForStatement(node) ||
-    ts.isForInStatement(node) ||
-    ts.isForOfStatement(node) ||
-    ts.isWhileStatement(node) ||
-    ts.isDoStatement(node) ||
-    ts.isCaseClause(node) ||
-    ts.isDefaultClause(node) ||
-    ts.isCatchClause(node) ||
-    ts.isConditionalExpression(node)
-  ) {
+  if (DECISION_STATEMENT_KINDS.has(node.kind)) {
     return true;
   }
   if (ts.isBinaryExpression(node)) {
-    switch (node.operatorToken.kind) {
-      case ts.SyntaxKind.AmpersandAmpersandToken:
-      case ts.SyntaxKind.BarBarToken:
-      case ts.SyntaxKind.QuestionQuestionToken:
-      case ts.SyntaxKind.AmpersandAmpersandEqualsToken:
-      case ts.SyntaxKind.BarBarEqualsToken:
-      case ts.SyntaxKind.QuestionQuestionEqualsToken:
-        return true;
-      default:
-        return false;
-    }
+    return LOGICAL_OPERATORS.has(node.operatorToken.kind);
   }
   return (
     (ts.isPropertyAccessExpression(node) ||

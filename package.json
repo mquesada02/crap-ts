@@ -1,0 +1,17 @@
+{
+  "name": "crap-ts",
+  "version": "0.0.0",
+  "description": "CRAP scores for TypeScript functions",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

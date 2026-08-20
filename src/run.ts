@@ -34,9 +34,13 @@ export function createNodeHost(): RunHost {
     rm: (path) => rmSync(path, { recursive: true, force: true }),
     runCommand: (command) => {
       const result = spawnSync(command, { shell: true, cwd, stdio: "inherit" });
-      return result.status ?? 1;
+      return commandExitCode(result.status);
     },
   };
+}
+
+function commandExitCode(status: number | null): number {
+  return status ?? 1;
 }
 
 export function run(options: CliResult, host: RunHost): number {

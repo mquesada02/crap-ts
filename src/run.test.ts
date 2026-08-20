@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 import { parseArgs } from "./cli.js";
 import { formatReport } from "./crap.js";
-import { run, type RunHost } from "./run.js";
+import { createNodeHost, run, type RunHost } from "./run.js";
 
 function capture() {
   let text = "";
@@ -427,4 +427,10 @@ test("all-N/A Coverage does not fail the Quality gate", () => {
     run(parseArgs(["--use-existing-coverage", "--threshold", "0"]), io.host),
   ).toBe(0);
   expect(io.stderr.text).not.toContain("CRAP threshold exceeded");
+});
+
+test("createNodeHost runCommand returns the process exit code", () => {
+  const host = createNodeHost();
+  expect(host.runCommand("true")).toBe(0);
+  expect(host.runCommand("false")).toBe(1);
 });

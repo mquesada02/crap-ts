@@ -1,8 +1,10 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -44,6 +46,12 @@ function host(overrides: Partial<RunHost> = {}) {
       stat(): { isDirectory(): boolean; isFile(): boolean } {
         throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
       },
+      rm(): void {
+        throw new Error("rm should not be called");
+      },
+      runCommand(): number {
+        throw new Error("runCommand should not be called");
+      },
       ...overrides,
     } satisfies RunHost,
   };
@@ -75,6 +83,7 @@ function fsHost(cwd: string, files: Record<string, string> = {}) {
     readFile: (path) => readFileSync(path, "utf8"),
     readdir: (path) => readdirSync(path, { withFileTypes: true }),
     stat: (path) => statSync(path),
+    rm: (path) => rmSync(path, { recursive: true, force: true }),
   });
 }
 
@@ -267,4 +276,122 @@ test("parse error exits 1", () => {
   });
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(1);
   expect(io.stderr.text).toContain("src/foo.ts");
+});
+
+test("runs the default coverage command unless --use-existing-coverage", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  const commands: string[] = [];
+  io.host.runCommand = (command) => {
+    commands.push(command);
+    return 0;
+  };
+  expect(run(parseArgs([]), io.host)).toBe(0);
+  expect(commands).toEqual([
+    "npx vitest run --coverage --coverage.reporter=lcov --coverage.reportsDirectory=coverage",
+  ]);
+});
+
+test("--coverage-command replaces the default command entirely", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  const commands: string[] = [];
+  io.host.runCommand = (command) => {
+    commands.push(command);
+    return 0;
+  };
+  expect(
+    run(parseArgs(["--coverage-command", "npx jest --coverage"]), io.host),
+  ).toBe(0);
+  expect(commands).toEqual(["npx jest --coverage"]);
+});
+
+test("a failed coverage command exits 1 without printing a report", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  io.host.runCommand = () => 2;
+  expect(run(parseArgs([]), io.host)).toBe(1);
+  expect(io.stdout.text).toBe("");
+});
+
+test("deletes stale Coverage artifacts before running the coverage command", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "stale",
+    "coverage/sentinel.txt": "keep me",
+  });
+  let staleAtRun = true;
+  io.host.runCommand = () => {
+    staleAtRun = existsSync(join(io.host.cwd, "coverage/sentinel.txt"));
+    return 0;
+  };
+  expect(run(parseArgs([]), io.host)).toBe(0);
+  expect(staleAtRun).toBe(false);
+  expect(existsSync(join(io.host.cwd, "coverage/sentinel.txt"))).toBe(false);
+});
+
+test("scores Coverage produced by the coverage command", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  io.host.runCommand = () => {
+    mkdirSync(join(io.host.cwd, "coverage"), { recursive: true });
+    writeFileSync(
+      join(io.host.cwd, "coverage/lcov.info"),
+      "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+    );
+    return 0;
+  };
+  expect(run(parseArgs([]), io.host)).toBe(0);
+  expect(io.stdout.text).toBe(
+    formatReport([
+      {
+        name: "foo",
+        namespace: "src/foo.ts",
+        complexity: 1,
+        coverage: 100,
+        crap: 1,
+      },
+    ]),
+  );
+  expect(io.stderr.text).toBe("");
+});
+
+test("missing LCOV after a coverage run warns and scores N/A", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  io.host.runCommand = () => 0;
+  expect(run(parseArgs([]), io.host)).toBe(0);
+  expect(io.stderr.text).toContain(
+    "Warning: LCOV file not found at coverage/lcov.info",
+  );
+  expect(io.stdout.text).toBe(
+    formatReport([
+      {
+        name: "foo",
+        namespace: "src/foo.ts",
+        complexity: 1,
+        coverage: undefined,
+        crap: undefined,
+      },
+    ]),
+  );
+});
+
+test("--use-existing-coverage does not run a coverage command", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  let ran = false;
+  io.host.runCommand = () => {
+    ran = true;
+    return 0;
+  };
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
+  expect(ran).toBe(false);
 });

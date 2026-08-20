@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { basename, dirname, relative as pathRelative, resolve } from "node:path";
 import { HELP_MESSAGE, type AnalyzeOptions, type CliResult } from "./cli.js";
 import {
@@ -17,16 +18,24 @@ export type RunHost = {
   readFile(path: string): string;
   readdir(path: string): { name: string; isDirectory(): boolean; isFile(): boolean }[];
   stat(path: string): { isDirectory(): boolean; isFile(): boolean };
+  rm(path: string): void;
+  runCommand(command: string): number;
 };
 
 export function createNodeHost(): RunHost {
+  const cwd = process.cwd();
   return {
-    cwd: process.cwd(),
+    cwd,
     stdout: process.stdout,
     stderr: process.stderr,
     readFile: (path) => readFileSync(path, "utf8"),
     readdir: (path) => readdirSync(path, { withFileTypes: true }),
     stat: (path) => statSync(path),
+    rm: (path) => rmSync(path, { recursive: true, force: true }),
+    runCommand: (command) => {
+      const result = spawnSync(command, { shell: true, cwd, stdio: "inherit" });
+      return result.status ?? 1;
+    },
   };
 }
 
@@ -43,6 +52,13 @@ export function run(options: CliResult, host: RunHost): number {
   if (files.length === 0) {
     host.stdout.write("No TypeScript files to analyze.\n");
     return 0;
+  }
+  if (!options.useExistingCoverage) {
+    host.rm(dirname(resolve(host.cwd, options.lcovPath)));
+    const exit = host.runCommand(options.coverageCommand);
+    if (exit !== 0) {
+      return 1;
+    }
   }
   const coverage = loadCoverage(options, host);
   const entries: CrapEntry[] = [];

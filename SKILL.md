@@ -13,7 +13,7 @@ From a TypeScript project root:
 
 ```bash
 npm install -g @mquesada02/crap-ts
-crap-ts
+crap-ts --json
 ```
 
 Or from this repository:
@@ -21,7 +21,7 @@ Or from this repository:
 ```bash
 pnpm install
 pnpm build
-pnpm exec crap-ts
+pnpm exec crap-ts --json
 ```
 
 The binary name is `crap-ts`.
@@ -30,23 +30,37 @@ The binary name is `crap-ts`.
 
 ```bash
 # Analyze TypeScript files under the current directory
-crap-ts
+crap-ts --json
 
 # Filter to specific path fragments
-crap-ts src/auth
+crap-ts --json src/auth
 
 # Score existing Coverage without deleting or running tests
-crap-ts --use-existing-coverage
+crap-ts --json --use-existing-coverage
 
 # Fail when the worst numeric CRAP is greater than 30
-crap-ts --threshold 30
+crap-ts --json --threshold 30
 ```
 
 Unless `--use-existing-coverage` is set, `crap-ts` deletes stale Coverage artifacts, runs `npx vitest run --coverage --coverage.reporter=lcov --coverage.reportsDirectory=coverage`, then analyzes the results.
 
 ### Output
 
-A table sorted by CRAP, worst first:
+`--json` prints a JSON array of Function rows on stdout (preferred for agents). Unknown Coverage is `null`.
+
+```json
+[
+  {
+    "function": "risky",
+    "namespace": "src/risky.ts",
+    "cc": 5,
+    "coverage": 0,
+    "crap": 30
+  }
+]
+```
+
+Without `--json`, a table sorted by CRAP, worst first:
 
 ```
 CRAP Report
@@ -66,6 +80,7 @@ ok                             src/ok.ts                              1  100.0% 
     --use-existing-coverage   Do not delete Coverage artifacts or run a coverage command.
     --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
+    --json                    Print a JSON array of Function rows instead of the table.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`. `--coverage-command` replaces the default Vitest command entirely.
@@ -88,4 +103,4 @@ Exit codes: `0` success (including empty selection); `1` usage error, coverage-c
 4. Computes cyclomatic complexity from Decision points (`if`, loops, `switch` cases, `catch`, ternary, `&&` `||` `??`, optional chain, logical assignment)
 5. Reads LCOV for per-Function line Coverage
 6. Applies CRAP formula: `CC² × (1 − coverage)³ + CC`
-7. Sorts by CRAP descending (N/A last) and prints the report
+7. Sorts by CRAP descending (N/A last) and prints `--json` or the table

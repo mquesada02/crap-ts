@@ -54,6 +54,12 @@ Fail locally when the worst numeric CRAP is greater than a threshold:
 crap-ts --threshold 30
 ```
 
+Print a JSON array of Function rows instead of the table:
+
+```bash
+crap-ts --json
+```
+
 ## Output
 
 ```
@@ -77,6 +83,7 @@ Unknown Coverage is `N/A`, never 0%. N/A rows sort after numeric CRAP.
     --use-existing-coverage   Do not delete Coverage artifacts or run a coverage command.
     --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
+    --json                    Print a JSON array of Function rows instead of the table.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`.
@@ -114,4 +121,4 @@ The Quality gate is off when `--threshold` is omitted. If every row is N/A, max 
 
 ## Skill
 
-`SKILL.md` is an agent skill: when asked for a CRAP report, an agent can install and run `crap-ts`.
+`SKILL.md` is an agent skill: when asked for a CRAP report, an agent can install and run `crap-ts --json`.

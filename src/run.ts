@@ -92,6 +92,20 @@ export function run(options: CliResult, host: RunHost): number {
     }
   }
   host.stdout.write(formatReport(sortByCrap(entries)));
+  if (options.threshold !== undefined) {
+    let max = 0;
+    for (const entry of entries) {
+      if (entry.crap !== undefined && entry.crap > max) {
+        max = entry.crap;
+      }
+    }
+    if (max > options.threshold) {
+      host.stderr.write(
+        `CRAP threshold exceeded: ${max} > ${options.threshold}\n`,
+      );
+      return 2;
+    }
+  }
   return 0;
 }
 

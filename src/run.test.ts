@@ -395,3 +395,36 @@ test("--use-existing-coverage does not run a coverage command", () => {
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
   expect(ran).toBe(false);
 });
+
+test("--threshold N exits 2 when the worst numeric CRAP is greater than N", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--threshold", "0"]), io.host),
+  ).toBe(2);
+  expect(io.stderr.text).toBe("CRAP threshold exceeded: 1 > 0\n");
+  expect(io.stdout.text).toContain("CRAP Report");
+});
+
+test("--threshold N does not fail when the worst numeric CRAP equals N", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--threshold", "1"]), io.host),
+  ).toBe(0);
+  expect(io.stderr.text).toBe("");
+});
+
+test("all-N/A Coverage does not fail the Quality gate", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--threshold", "0"]), io.host),
+  ).toBe(0);
+  expect(io.stderr.text).not.toContain("CRAP threshold exceeded");
+});

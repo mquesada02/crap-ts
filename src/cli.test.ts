@@ -23,6 +23,7 @@ test("no args analyze with default LCOV, coverage command, cwd root, and no filt
     lcovPath: "coverage/lcov.info",
     sourceRoots: ["."],
     threshold: undefined,
+    json: false,
     pathFragments: [],
   });
 });
@@ -51,6 +52,7 @@ test("parses flags, repeatable source roots, and path-fragment args", () => {
     lcovPath: "tmp/lcov.info",
     sourceRoots: ["src", "packages/app"],
     threshold: 8,
+    json: false,
     pathFragments: ["foo", "bar"],
   });
 });
@@ -90,6 +92,44 @@ test("non-default --lcov without --use-existing-coverage or --coverage-command i
   expect(result.message).toContain(
     "--lcov requires --use-existing-coverage or --coverage-command",
   );
+});
+
+test("--json sets json true", () => {
+  expect(parseArgs(["--json"])).toMatchObject({
+    action: "analyze",
+    json: true,
+  });
+});
+
+test("--json src/auth keeps src/auth as a path-fragment", () => {
+  expect(parseArgs(["--json", "src/auth"])).toMatchObject({
+    action: "analyze",
+    json: true,
+    pathFragments: ["src/auth"],
+  });
+});
+
+test("--json=true is an unknown option", () => {
+  const result = parseArgs(["--json=true"]);
+  expect(result.action).toBe("error");
+  if (result.action !== "error") {
+    throw new Error("expected error");
+  }
+  expect(result.message).toContain("Unknown option: --json=true");
+});
+
+test("help message mentions --json", () => {
+  const result = parseArgs(["--help"]);
+  expect(result.action).toBe("help");
+  if (result.action !== "help") {
+    throw new Error("expected help");
+  }
+  expect(result.message).toContain("--json");
+});
+
+test("--help wins when --json is also present", () => {
+  expect(parseArgs(["--json", "--help"])).toMatchObject({ action: "help" });
+  expect(parseArgs(["--help", "--json"])).toMatchObject({ action: "help" });
 });
 
 test("non-numeric or negative --threshold is a usage error", () => {

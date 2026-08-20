@@ -8,7 +8,13 @@ import {
   parseLcov,
   type LcovCoverage,
 } from "./coverage.js";
-import { crapScore, formatReport, sortByCrap, type CrapEntry } from "./crap.js";
+import {
+  crapScore,
+  formatJson,
+  formatReport,
+  sortByCrap,
+  type CrapEntry,
+} from "./crap.js";
 import { extractFunctions } from "./functions.js";
 
 export type RunHost = {
@@ -54,7 +60,9 @@ export function run(options: CliResult, host: RunHost): number {
   }
   const files = discoverFiles(options, host);
   if (files.length === 0) {
-    host.stdout.write("No TypeScript files to analyze.\n");
+    host.stdout.write(
+      options.json ? formatJson([]) : "No TypeScript files to analyze.\n",
+    );
     return 0;
   }
   if (!options.useExistingCoverage) {
@@ -95,7 +103,10 @@ export function run(options: CliResult, host: RunHost): number {
       });
     }
   }
-  host.stdout.write(formatReport(sortByCrap(entries)));
+  const sorted = sortByCrap(entries);
+  host.stdout.write(
+    options.json ? formatJson(sorted) : formatReport(sorted),
+  );
   if (options.threshold !== undefined) {
     let max = 0;
     for (const entry of entries) {

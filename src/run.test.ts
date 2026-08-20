@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 import { parseArgs } from "./cli.js";
-import { formatReport } from "./crap.js";
+import { formatJson, formatReport } from "./crap.js";
 import { createNodeHost, run, type RunHost } from "./run.js";
 
 function capture() {
@@ -95,6 +95,19 @@ test("empty selection prints a message and exits 0", () => {
   const io = project();
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
   expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+});
+
+test("empty selection with --json prints an empty array and exits 0", () => {
+  const io = project();
+  let ran = false;
+  io.host.runCommand = () => {
+    ran = true;
+    return 0;
+  };
+  expect(run(parseArgs(["--json"]), io.host)).toBe(0);
+  expect(io.stdout.text).toBe("[]\n");
+  expect(io.stderr.text).toBe("");
+  expect(ran).toBe(false);
 });
 
 test("declaration files are not analyzed", () => {
@@ -427,6 +440,115 @@ test("all-N/A Coverage does not fail the Quality gate", () => {
     run(parseArgs(["--use-existing-coverage", "--threshold", "0"]), io.host),
   ).toBe(0);
   expect(io.stderr.text).not.toContain("CRAP threshold exceeded");
+});
+
+test("--json prints a JSON array instead of the table", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  expect(run(parseArgs(["--use-existing-coverage", "--json"]), io.host)).toBe(
+    0,
+  );
+  expect(io.stdout.text).toBe(
+    formatJson([
+      {
+        name: "foo",
+        namespace: "src/foo.ts",
+        complexity: 1,
+        coverage: 100,
+        crap: 1,
+      },
+    ]),
+  );
+  expect(io.stdout.text).not.toContain("CRAP Report");
+  expect(io.stderr.text).toBe("");
+});
+
+test("missing LCOV with --json warns and emits null Coverage", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  expect(run(parseArgs(["--use-existing-coverage", "--json"]), io.host)).toBe(
+    0,
+  );
+  expect(io.stderr.text).toContain(
+    "Warning: LCOV file not found at coverage/lcov.info",
+  );
+  expect(io.stdout.text).toBe(
+    formatJson([
+      {
+        name: "foo",
+        namespace: "src/foo.ts",
+        complexity: 1,
+        coverage: undefined,
+        crap: undefined,
+      },
+    ]),
+  );
+});
+
+test("--json with --threshold N prints JSON then fails the Quality gate", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--json", "--threshold", "0"]),
+      io.host,
+    ),
+  ).toBe(2);
+  expect(io.stdout.text).toBe(
+    formatJson([
+      {
+        name: "foo",
+        namespace: "src/foo.ts",
+        complexity: 1,
+        coverage: 100,
+        crap: 1,
+      },
+    ]),
+  );
+  expect(io.stderr.text).toBe("CRAP threshold exceeded: 1 > 0\n");
+});
+
+test("a failed coverage command with --json exits 1 without JSON", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  io.host.runCommand = () => 2;
+  expect(run(parseArgs(["--json"]), io.host)).toBe(1);
+  expect(io.stdout.text).toBe("");
+});
+
+test("unreadable source with --json exits 1 without JSON", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  const originalRead = io.host.readFile;
+  io.host.readFile = (path: string) => {
+    if (path.endsWith("foo.ts")) {
+      throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+    }
+    return originalRead(path);
+  };
+  expect(run(parseArgs(["--use-existing-coverage", "--json"]), io.host)).toBe(
+    1,
+  );
+  expect(io.stderr.text).toContain("src/foo.ts");
+  expect(io.stdout.text).toBe("");
+});
+
+test("parse error with --json exits 1 without JSON", () => {
+  const io = project({
+    "src/foo.ts": "function {",
+  });
+  expect(run(parseArgs(["--use-existing-coverage", "--json"]), io.host)).toBe(
+    1,
+  );
+  expect(io.stderr.text).toContain("src/foo.ts");
+  expect(io.stdout.text).toBe("");
 });
 
 test("createNodeHost runCommand returns the process exit code", () => {

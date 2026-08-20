@@ -32,6 +32,17 @@ export function sortByCrap(entries: readonly CrapEntry[]): CrapEntry[] {
   });
 }
 
+export function formatJson(entries: readonly CrapEntry[]): string {
+  const rows = entries.map((entry) => ({
+    function: entry.name,
+    namespace: entry.namespace,
+    cc: entry.complexity,
+    coverage: entry.coverage ?? null,
+    crap: entry.crap ?? null,
+  }));
+  return `${JSON.stringify(rows, null, 2)}\n`;
+}
+
 export function formatReport(entries: readonly CrapEntry[]): string {
   const header = formatRow("Function", "Namespace", "CC", "Cov%", "CRAP");
   const separator = "-".repeat(header.length);

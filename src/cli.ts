@@ -9,6 +9,7 @@ Options:
       --use-existing-coverage   Do not delete Coverage artifacts or run a coverage command.
       --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
       --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
+      --json                    Print a JSON array of Function rows instead of the table.
 
 Arguments:
   path-fragment    Optional source path fragment. When present, only matching
@@ -26,6 +27,7 @@ export type AnalyzeOptions = {
   lcovPath: string;
   sourceRoots: string[];
   threshold: number | undefined;
+  json: boolean;
   pathFragments: string[];
 };
 
@@ -59,6 +61,7 @@ export function parseArgs(args: string[]): CliResult {
     lcovPath: DEFAULT_LCOV_PATH,
     sourceRoots: [],
     threshold: undefined,
+    json: false,
     pathFragments: [],
   };
   let coverageCommandGiven = false;
@@ -69,6 +72,10 @@ export function parseArgs(args: string[]): CliResult {
     }
     if (arg === "--use-existing-coverage") {
       options.useExistingCoverage = true;
+      continue;
+    }
+    if (arg === "--json") {
+      options.json = true;
       continue;
     }
     if (arg === "--source-root" || arg === "-s") {

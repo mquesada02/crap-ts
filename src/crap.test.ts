@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { crapScore, formatReport, sortByCrap } from "./crap.js";
+import { crapScore, formatJson, formatReport, sortByCrap } from "./crap.js";
 
 test("CRAP equals CC when Coverage is 100%", () => {
   expect(crapScore(5, 100)).toBe(5);
@@ -54,4 +54,73 @@ test("prints Uncle Bob table with Function, Namespace, CC, Cov%, and CRAP", () =
       "",
     ].join("\n"),
   );
+});
+
+test("formatJson on an empty list is an empty array plus newline", () => {
+  expect(formatJson([])).toBe("[]\n");
+});
+
+test("formatJson emits pretty rows with null Coverage and full-precision numbers", () => {
+  expect(
+    formatJson([
+      {
+        name: "Widget.run",
+        namespace: "src/widget.ts",
+        complexity: 4,
+        coverage: 50,
+        crap: 5.5,
+      },
+      {
+        name: "unknown",
+        namespace: "src/missing.ts",
+        complexity: 2,
+        coverage: undefined,
+        crap: undefined,
+      },
+    ]),
+  ).toBe(`[
+  {
+    "function": "Widget.run",
+    "namespace": "src/widget.ts",
+    "cc": 4,
+    "coverage": 50,
+    "crap": 5.5
+  },
+  {
+    "function": "unknown",
+    "namespace": "src/missing.ts",
+    "cc": 2,
+    "coverage": null,
+    "crap": null
+  }
+]
+`);
+});
+
+test("formatJson does not omit unknown Coverage keys or round numbers", () => {
+  const document = formatJson([
+    {
+      name: "foo",
+      namespace: "src/foo.ts",
+      complexity: 3,
+      coverage: 100 / 3,
+      crap: 4 + 1 / 8,
+    },
+  ]);
+  const [row] = JSON.parse(document) as {
+    function: string;
+    namespace: string;
+    cc: number;
+    coverage: number | null;
+    crap: number | null;
+  }[];
+  expect(Object.keys(row ?? {})).toEqual([
+    "function",
+    "namespace",
+    "cc",
+    "coverage",
+    "crap",
+  ]);
+  expect(row?.coverage).toBe(100 / 3);
+  expect(row?.crap).toBe(4 + 1 / 8);
 });

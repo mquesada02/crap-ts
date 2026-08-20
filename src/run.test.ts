@@ -133,6 +133,63 @@ test("a .js --source-root file is ignored", () => {
   expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
 });
 
+test("a TypeScript --source-root file is analyzed", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "src/bar.ts": "export function bar() {\n  return 1;\n}\n",
+  });
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--source-root", "src/foo.ts"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("bar");
+});
+
+test("a nonexistent --source-root path is an empty selection", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() { return 1; }",
+  });
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--source-root", "missing"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+});
+
+test("a --source-root that is neither file nor directory is skipped", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() { return 1; }",
+  });
+  io.host.stat = () => ({
+    isDirectory: () => false,
+    isFile: () => false,
+  });
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--source-root", "src"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+});
+
+test("a --source-root stat error other than missing is not swallowed", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() { return 1; }",
+  });
+  io.host.stat = () => {
+    throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+  };
+  expect(() =>
+    run(parseArgs(["--use-existing-coverage", "--source-root", "src"]), io.host),
+  ).toThrow(/EACCES/);
+});
+
 test("skips .js, test files, and skipped directories", () => {
   const io = project({
     "src/foo.js": "export function foo() { return 1; }",

@@ -271,3 +271,31 @@ test("parses tsx as a single source file", () => {
   );
   expect(fn).toMatchObject({ name: "Box", namespace: "src/box.tsx", complexity: 1 });
 });
+
+test("does not count a nested class Function's Decision points on the parent", () => {
+  const extracted = extractFunctions(
+    `
+function process(x: boolean) {
+  class Widget {
+    run() {
+      if (x) { return 1; }
+      return 0;
+    }
+  }
+}
+`,
+    "src/foo.ts",
+  );
+  expect(extracted.map((fn) => ({ name: fn.name, complexity: fn.complexity }))).toEqual([
+    { name: "process", complexity: 1 },
+    { name: "process.Widget.run", complexity: 2 },
+  ]);
+});
+
+test("does not extract function-valued properties as rows", () => {
+  const names = extractFunctions(
+    "function parent() { const api = { run() {} }; }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent"]);
+});

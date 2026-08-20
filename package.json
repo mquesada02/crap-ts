@@ -3,7 +3,11 @@
   "version": "0.0.0",
   "description": "CRAP scores for TypeScript functions",
   "type": "module",
+  "bin": {
+    "crap-ts": "dist/bin.js"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

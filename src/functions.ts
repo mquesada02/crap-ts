@@ -18,6 +18,9 @@ export function extractFunctions(
     ts.ScriptTarget.Latest,
     true,
   );
+  if (parseErrors(sourceFile).length > 0) {
+    throw new Error(`failed to parse ${filePath}`);
+  }
   const functions: ExtractedFunction[] = [];
 
   function visit(node: ts.Node, enclosingName: string | undefined): void {
@@ -203,4 +206,10 @@ function isConstBound(node: ts.Node): boolean {
 
 function lineOf(sourceFile: ts.SourceFile, pos: number): number {
   return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
+}
+
+function parseErrors(sourceFile: ts.SourceFile): readonly ts.Diagnostic[] {
+  return (
+    sourceFile as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }
+  ).parseDiagnostics;
 }

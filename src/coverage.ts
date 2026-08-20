@@ -13,7 +13,7 @@ export function readLcov(path: string): LcovCoverage | undefined {
   }
 }
 
-function isMissingFile(error: unknown): boolean {
+export function isMissingFile(error: unknown): boolean {
   return (
     typeof error === "object" &&
     error !== null &&

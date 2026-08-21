@@ -55,6 +55,15 @@ export function extractFunctions(
       visitClass(node, enclosingName, undefined);
       return;
     }
+    if (ts.isObjectLiteralExpression(node)) {
+      visitObjectLiteral(node, enclosingName);
+      return;
+    }
+    if (ts.isBinaryExpression(node)) {
+      if (visitAssignment(node, enclosingName)) {
+        return;
+      }
+    }
     ts.forEachChild(node, (child) => visit(child, enclosingName));
   }
 
@@ -80,6 +89,56 @@ export function extractFunctions(
     }
   }
 
+  function visitAssignment(
+    node: ts.BinaryExpression,
+    enclosingName: string | undefined,
+  ): boolean {
+    if (
+      node.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+      !isFunctionLike(node.right) ||
+      !isPropertyWrite(node.left)
+    ) {
+      return false;
+    }
+    const name = qualify(
+      enclosingName,
+      assignedPropertyName(node.left, sourceFile),
+    );
+    functions.push(toFunction(node.right, name, filePath, sourceFile));
+    ts.forEachChild(node.right, (child) => visit(child, name));
+    return true;
+  }
+
+  function visitObjectLiteral(
+    node: ts.ObjectLiteralExpression,
+    enclosingName: string | undefined,
+  ): void {
+    for (const prop of node.properties) {
+      if (
+        ts.isGetAccessorDeclaration(prop) ||
+        ts.isSetAccessorDeclaration(prop)
+      ) {
+        continue;
+      }
+      if (ts.isMethodDeclaration(prop) && prop.body !== undefined) {
+        if (isObjectLiteralConstructor(prop)) {
+          continue;
+        }
+        const name = qualify(enclosingName, prop.name.getText(sourceFile));
+        functions.push(toFunction(prop, name, filePath, sourceFile));
+        ts.forEachChild(prop.body, (child) => visit(child, name));
+        continue;
+      }
+      if (ts.isPropertyAssignment(prop) && isFunctionLike(prop.initializer)) {
+        const name = qualify(enclosingName, prop.name.getText(sourceFile));
+        functions.push(toFunction(prop.initializer, name, filePath, sourceFile));
+        ts.forEachChild(prop.initializer, (child) => visit(child, name));
+        continue;
+      }
+      visit(prop, enclosingName);
+    }
+  }
+
   visit(sourceFile, undefined);
   return functions;
 }
@@ -96,6 +155,28 @@ function isFunctionLike(
   node: ts.Expression,
 ): node is ts.ArrowFunction | ts.FunctionExpression {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node);
+}
+
+function isPropertyWrite(
+  left: ts.Expression,
+): left is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+  return (
+    ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)
+  );
+}
+
+function assignedPropertyName(
+  left: ts.PropertyAccessExpression | ts.ElementAccessExpression,
+  sourceFile: ts.SourceFile,
+): string {
+  if (ts.isPropertyAccessExpression(left)) {
+    return left.name.getText(sourceFile);
+  }
+  return `[${left.argumentExpression.getText(sourceFile)}]`;
+}
+
+function isObjectLiteralConstructor(prop: ts.MethodDeclaration): boolean {
+  return ts.isIdentifier(prop.name) && prop.name.text === "constructor";
 }
 
 function toFunction(
@@ -187,7 +268,29 @@ function isOwnRowRoot(node: ts.Node): boolean {
   }
   return (
     (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
-    isConstBound(node)
+    (isConstBound(node) ||
+      isFunctionValuedProperty(node) ||
+      isAssignedFunction(node))
+  );
+}
+
+function isFunctionValuedProperty(node: ts.Node): boolean {
+  const parent = node.parent;
+  return (
+    parent !== undefined &&
+    ts.isPropertyAssignment(parent) &&
+    parent.initializer === node
+  );
+}
+
+function isAssignedFunction(node: ts.Node): boolean {
+  const parent = node.parent;
+  return (
+    parent !== undefined &&
+    ts.isBinaryExpression(parent) &&
+    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    parent.right === node &&
+    isPropertyWrite(parent.left)
   );
 }
 

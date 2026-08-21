@@ -292,10 +292,204 @@ function process(x: boolean) {
   ]);
 });
 
-test("does not extract function-valued properties as rows", () => {
+test("extracts an object-literal method as a Function", () => {
   const names = extractFunctions(
     "function parent() { const api = { run() {} }; }",
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["parent"]);
+  expect(names).toEqual(["parent", "parent.run"]);
+});
+
+test("extracts function-valued properties as Functions", () => {
+  const names = extractFunctions(
+    "function parent() { const api = { run: () => {}, other: function () {} }; }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.run", "parent.other"]);
+});
+
+test("extracts object-literal Functions on unnamed objects", () => {
+  const names = extractFunctions(
+    "function parent() { foo({ run() {} }); return { other: () => {} }; }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.run", "parent.other"]);
+});
+
+test("extracts nested object-literal Functions as the property name", () => {
+  const names = extractFunctions(
+    "function parent() { const api = { nested: { run() {} } }; }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.run"]);
+});
+
+test("names object-literal Functions from the property source text", () => {
+  const names = extractFunctions(
+    `const api = {
+  run() {},
+  "quoted"() {},
+  1() {},
+  [key]() {},
+  ['computed']() {},
+};`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["run", '"quoted"', "1", "[key]", "['computed']"]);
+});
+
+test("uses the property name over an inner function name", () => {
+  const names = extractFunctions(
+    "const api = { run: function helper() {} };",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["run"]);
+});
+
+test("does not extract a property that references another Function", () => {
+  const names = extractFunctions(
+    "function otherFn() {} const api = { run: otherFn, get x() { return 1; } };",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["otherFn"]);
+});
+
+test("does not extract object-literal constructors, getters, or setters", () => {
+  const names = extractFunctions(
+    `
+function parent() {
+  const api = {
+    constructor() { this.bar = () => {}; function helper() {} },
+    get x() { foo.nested = () => {}; return 1; },
+    set x(v: number) { foo.set = () => {}; },
+    run() {},
+  };
+}
+`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.run"]);
+});
+
+test("extracts a nested object-literal Function on an unnamed object", () => {
+  const names = extractFunctions(
+    "function parent() { foo({ nested: { run() {} } }); }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.run"]);
+});
+
+test("extracts assignment Functions with property-name report names", () => {
+  const names = extractFunctions(
+    `
+foo.bar = () => {};
+foo[key] = () => {};
+foo['bar'] = function () {};
+foo[1] = () => {};
+`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["bar", "[key]", "['bar']", "[1]"]);
+});
+
+test("prefixes assignment Functions with the enclosing Function", () => {
+  const names = extractFunctions(
+    `
+function parent() { foo.bar = () => {}; }
+class Widget { run() { this.helper = function () {}; } }
+`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.bar", "Widget.run", "Widget.run.helper"]);
+});
+
+test("does not extract an assignment Function from a constructor", () => {
+  const names = extractFunctions(
+    "class Widget { constructor() { this.bar = () => {}; } run() {} }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.run"]);
+});
+
+test("does not count object-literal Decision points on the parent", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { const api = { run() { if (x) { return 1; } } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.run", complexity: 2 },
+  ]);
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { const api = { run: () => { if (x) { return 1; } } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.run", complexity: 2 },
+  ]);
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { const api = { run: function () { if (x) { return 1; } } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.run", complexity: 2 },
+  ]);
+});
+
+test("does not count assignment Function Decision points on the parent", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { foo.bar = () => { if (x) { return 1; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.bar", complexity: 2 },
+  ]);
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { foo.bar = function () { if (x) { return 1; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.bar", complexity: 2 },
+  ]);
+});
+
+test("extracts object-literal Functions from a let object and skips let-bound functions", () => {
+  const names = extractFunctions(
+    "let api = { run() {} }; let foo = () => {};",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["run"]);
+});
+
+test("records line range of the object-literal method and assignment Function", () => {
+  const extracted = extractFunctions(
+    `const api = {
+  run() {
+    return 1;
+  }
+};
+foo.bar = () => {
+  return 1;
+};`,
+    "src/foo.ts",
+  );
+  expect(
+    extracted.map((fn) => ({
+      name: fn.name,
+      startLine: fn.startLine,
+      endLine: fn.endLine,
+    })),
+  ).toEqual([
+    { name: "run", startLine: 2, endLine: 4 },
+    { name: "bar", startLine: 6, endLine: 8 },
+  ]);
 });

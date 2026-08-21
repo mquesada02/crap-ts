@@ -60,6 +60,12 @@ Print a JSON array of Function rows instead of the table:
 crap-ts --json
 ```
 
+Score only git-dirty TypeScript files in the working tree:
+
+```bash
+crap-ts --changed
+```
+
 ## Output
 
 ```
@@ -84,13 +90,14 @@ Unknown Coverage is `N/A`, never 0%. N/A rows sort after numeric CRAP.
     --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
     --json                    Print a JSON array of Function rows instead of the table.
+    --changed                 Analyze git-dirty TypeScript files in the working tree.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`.
 
 `--coverage-command` replaces the default Vitest command entirely.
 
-Path-fragment arguments keep a file if any fragment is a substring of its working-directory-relative path.
+Path-fragment arguments keep a file if any fragment is a substring of its working-directory-relative path. `--changed` cannot be combined with path-fragments.
 
 Analyzed extensions: `.ts`, `.tsx`, `.mts`, `.cts`. Skipped directories: `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`. Test files (`*.test.*`, `*.spec.*`, `__tests__/`) are skipped.
 
@@ -114,7 +121,7 @@ CRAP(fn) = CC² × (1 − coverage)³ + CC
 | Code | Meaning |
 |------|---------|
 | 0    | Success, including empty selection |
-| 1    | Usage error, coverage-command failure, unreadable source, or parse error |
+| 1    | Usage error, coverage-command failure, git status failure, unreadable source, or parse error |
 | 2    | Quality gate: `--threshold N` and the worst numeric CRAP is greater than N |
 
 The Quality gate is off when `--threshold` is omitted. If every row is N/A, max CRAP is 0 and the gate does not fail.

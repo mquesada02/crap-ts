@@ -1,6 +1,12 @@
 import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { basename, dirname, relative as pathRelative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative as pathRelative,
+  resolve,
+} from "node:path";
 import { HELP_MESSAGE, type AnalyzeOptions, type CliResult } from "./cli.js";
 import {
   coverageForRange,
@@ -26,6 +32,7 @@ export type RunHost = {
   stat(path: string): { isDirectory(): boolean; isFile(): boolean };
   rm(path: string): void;
   runCommand(command: string): number;
+  runCaptured(argv: string[]): { status: number; stdout: string; stderr: string };
 };
 
 export function createNodeHost(): RunHost {
@@ -41,6 +48,18 @@ export function createNodeHost(): RunHost {
     runCommand: (command) => {
       const result = spawnSync(command, { shell: true, cwd, stdio: "inherit" });
       return commandExitCode(result.status);
+    },
+    runCaptured: (argv) => {
+      const [cmd, ...args] = argv;
+      if (cmd === undefined) {
+        return { status: 1, stdout: "", stderr: "" };
+      }
+      const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
+      return {
+        status: commandExitCode(result.error ? 1 : result.status),
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+      };
     },
   };
 }
@@ -58,7 +77,12 @@ export function run(options: CliResult, host: RunHost): number {
     host.stderr.write(`${options.message}\n\n${HELP_MESSAGE}`);
     return 1;
   }
-  const files = discoverFiles(options, host);
+  const files = options.changed
+    ? discoverChangedFiles(options, host)
+    : discoverFiles(options, host);
+  if (files === undefined) {
+    return 1;
+  }
   if (files.length === 0) {
     host.stdout.write(
       options.json ? formatJson([]) : "No TypeScript files to analyze.\n",
@@ -152,6 +176,89 @@ const SKIP_DIRECTORIES = new Set([
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts"];
 
+function discoverChangedFiles(
+  options: AnalyzeOptions,
+  host: RunHost,
+): string[] | undefined {
+  const git = host.runCaptured([
+    "git",
+    "-C",
+    host.cwd,
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
+  if (git.status !== 0) {
+    const detail = git.stderr.trim();
+    host.stderr.write(
+      detail === ""
+        ? "Error: git status failed\n"
+        : `Error: git status failed\n${detail}\n`,
+    );
+    return undefined;
+  }
+  const files: string[] = [];
+  for (const relative of porcelainPaths(git.stdout)) {
+    const posix = posixify(relative);
+    if (!isUnderSourceRoots(posix, options.sourceRoots, host.cwd)) {
+      continue;
+    }
+    const absolute = resolve(host.cwd, posix);
+    let info;
+    try {
+      info = host.stat(absolute);
+    } catch (error) {
+      if (isMissingFile(error)) {
+        continue;
+      }
+      throw error;
+    }
+    if (
+      info.isFile() &&
+      !isSkippedPath(posix) &&
+      isAnalyzableFile(dirname(absolute), basename(absolute))
+    ) {
+      files.push(posix);
+    }
+  }
+  return [...new Set(files)].sort();
+}
+
+function porcelainPaths(porcelain: string): string[] {
+  const parts = porcelain.split("\0");
+  const paths: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const record = parts[i];
+    if (record === undefined || record.length < 4) {
+      continue;
+    }
+    const xy = record.slice(0, 2);
+    const path = record.slice(3);
+    if (path === "") {
+      continue;
+    }
+    paths.push(path);
+    // Porcelain v1 -z rename/copy is `XY dest\0orig\0`. Keep dest, skip orig.
+    if (xy.includes("R") || xy.includes("C")) {
+      i += 1;
+    }
+  }
+  return paths;
+}
+
+function isUnderSourceRoots(
+  file: string,
+  roots: string[],
+  cwd: string,
+): boolean {
+  const resolvedFile = resolve(cwd, file);
+  return roots.some((root) => {
+    const rel = posixify(pathRelative(resolve(cwd, root), resolvedFile));
+    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  });
+}
+
 function discoverFiles(options: AnalyzeOptions, host: RunHost): string[] {
   const files: string[] = [];
   for (const root of options.sourceRoots) {
@@ -200,6 +307,10 @@ function collectFiles(path: string, host: RunHost, files: string[]): void {
       files.push(resolve(path, entry.name));
     }
   }
+}
+
+function isSkippedPath(file: string): boolean {
+  return posixify(file).split("/").some((segment) => SKIP_DIRECTORIES.has(segment));
 }
 
 function isAnalyzableFile(directory: string, name: string): boolean {

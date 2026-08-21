@@ -10,6 +10,7 @@ Options:
       --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
       --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
       --json                    Print a JSON array of Function rows instead of the table.
+      --changed                 Analyze git-dirty TypeScript files in the working tree.
 
 Arguments:
   path-fragment    Optional source path fragment. When present, only matching
@@ -28,6 +29,7 @@ export type AnalyzeOptions = {
   sourceRoots: string[];
   threshold: number | undefined;
   json: boolean;
+  changed: boolean;
   pathFragments: string[];
 };
 
@@ -62,6 +64,7 @@ export function parseArgs(args: string[]): CliResult {
     sourceRoots: [],
     threshold: undefined,
     json: false,
+    changed: false,
     pathFragments: [],
   };
   let coverageCommandGiven = false;
@@ -76,6 +79,10 @@ export function parseArgs(args: string[]): CliResult {
     }
     if (arg === "--json") {
       options.json = true;
+      continue;
+    }
+    if (arg === "--changed") {
+      options.changed = true;
       continue;
     }
     if (arg === "--source-root" || arg === "-s") {
@@ -126,6 +133,12 @@ export function parseArgs(args: string[]): CliResult {
       return { action: "error", message: `Unknown option: ${arg}` };
     }
     options.pathFragments.push(arg);
+  }
+  if (options.changed && options.pathFragments.length > 0) {
+    return {
+      action: "error",
+      message: "--changed cannot be combined with path-fragment arguments",
+    };
   }
   if (options.sourceRoots.length === 0) {
     options.sourceRoots = ["."];

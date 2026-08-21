@@ -24,6 +24,7 @@ test("no args analyze with default LCOV, coverage command, cwd root, and no filt
     sourceRoots: ["."],
     threshold: undefined,
     json: false,
+    changed: false,
     pathFragments: [],
   });
 });
@@ -53,6 +54,7 @@ test("parses flags, repeatable source roots, and path-fragment args", () => {
     sourceRoots: ["src", "packages/app"],
     threshold: 8,
     json: false,
+    changed: false,
     pathFragments: ["foo", "bar"],
   });
 });
@@ -130,6 +132,46 @@ test("help message mentions --json", () => {
 test("--help wins when --json is also present", () => {
   expect(parseArgs(["--json", "--help"])).toMatchObject({ action: "help" });
   expect(parseArgs(["--help", "--json"])).toMatchObject({ action: "help" });
+});
+
+test("--changed sets changed true", () => {
+  expect(parseArgs(["--changed"])).toMatchObject({
+    action: "analyze",
+    changed: true,
+  });
+});
+
+test("--changed with a path-fragment is a usage error", () => {
+  const result = parseArgs(["--changed", "src/auth"]);
+  expect(result.action).toBe("error");
+  if (result.action !== "error") {
+    throw new Error("expected error");
+  }
+  expect(result.message).toContain(
+    "--changed cannot be combined with path-fragment arguments",
+  );
+});
+
+test("--changed=true is an unknown option", () => {
+  const result = parseArgs(["--changed=true"]);
+  expect(result.action).toBe("error");
+  if (result.action !== "error") {
+    throw new Error("expected error");
+  }
+  expect(result.message).toContain("Unknown option: --changed=true");
+});
+
+test("help message mentions --changed", () => {
+  const result = parseArgs(["--help"]);
+  expect(result.action).toBe("help");
+  if (result.action !== "help") {
+    throw new Error("expected help");
+  }
+  expect(result.message).toContain("--changed");
+});
+
+test("--help wins when --changed is also present", () => {
+  expect(parseArgs(["--changed", "--help"])).toMatchObject({ action: "help" });
 });
 
 test("non-numeric or negative --threshold is a usage error", () => {

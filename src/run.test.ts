@@ -52,6 +52,9 @@ function host(overrides: Partial<RunHost> = {}) {
       runCommand(): number {
         throw new Error("runCommand should not be called");
       },
+      runCaptured(): { status: number; stdout: string; stderr: string } {
+        throw new Error("runCaptured should not be called");
+      },
       ...overrides,
     } satisfies RunHost,
   };
@@ -606,6 +609,179 @@ test("parse error with --json exits 1 without JSON", () => {
   );
   expect(io.stderr.text).toContain("src/foo.ts");
   expect(io.stdout.text).toBe("");
+});
+
+test("--changed scores only dirty files", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "src/bar.ts": "export function bar() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  const argv: string[][] = [];
+  io.host.runCaptured = (args) => {
+    argv.push(args);
+    return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+  };
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--changed"]), io.host),
+  ).toBe(0);
+  expect(argv).toEqual([
+    [
+      "git",
+      "-C",
+      io.host.cwd,
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+    ],
+  ]);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("bar");
+});
+
+test("--changed git failure exits 1 without a report", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 128,
+    stdout: "",
+    stderr: "fatal: not a git repository",
+  });
+  expect(run(parseArgs(["--use-existing-coverage", "--changed"]), io.host)).toBe(
+    1,
+  );
+  expect(io.stderr.text).toContain("Error: git status failed");
+  expect(io.stderr.text).toContain("fatal: not a git repository");
+  expect(io.stdout.text).toBe("");
+});
+
+test("--changed with empty porcelain is an empty selection", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  let ran = false;
+  io.host.runCaptured = () => ({ status: 0, stdout: "", stderr: "" });
+  io.host.runCommand = () => {
+    ran = true;
+    return 0;
+  };
+  expect(run(parseArgs(["--changed"]), io.host)).toBe(0);
+  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(ran).toBe(false);
+});
+
+test("--changed skips deleted paths and test files", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "src/foo.test.ts": "export function testFoo() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 0,
+    stdout: "M  src/foo.ts\0 D src/gone.ts\0?? src/foo.test.ts\0",
+    stderr: "",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--changed"]), io.host),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("testFoo");
+  expect(io.stdout.text).not.toContain("gone");
+});
+
+test("--changed uses the rename destination and untracked files", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "src/bar.ts": "export function bar() {\n  return 1;\n}\n",
+    "src/new/c.ts": "export function c() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 0,
+    stdout: "R  src/bar.ts\0src/foo.ts\0?? src/new/c.ts\0",
+    stderr: "",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--changed"]), io.host),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("bar");
+  expect(io.stdout.text).toContain("c");
+  expect(io.stdout.text).not.toContain("foo");
+});
+
+test("--changed drops dirty files in skipped directories", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "dist/out.ts": "export function out() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 0,
+    stdout: "A  src/foo.ts\0M  dist/out.ts\0",
+    stderr: "",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--changed"]), io.host),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("out");
+});
+
+test("--changed drops dirty files outside --source-root", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "other/x.ts": "export function x() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 0,
+    stdout: "M  src/foo.ts\0M  other/x.ts\0",
+    stderr: "",
+  });
+  expect(
+    run(
+      parseArgs([
+        "--use-existing-coverage",
+        "--changed",
+        "--source-root",
+        "src",
+      ]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("x");
+});
+
+test("--json --changed with empty porcelain prints an empty array", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({ status: 0, stdout: "", stderr: "" });
+  expect(run(parseArgs(["--json", "--changed"]), io.host)).toBe(0);
+  expect(io.stdout.text).toBe("[]\n");
+});
+
+test("--changed with --threshold still applies the Quality gate", () => {
+  const io = project({
+    "src/foo.ts": "export function foo() {\n  return 1;\n}\n",
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 0,
+    stdout: "M  src/foo.ts\0",
+    stderr: "",
+  });
+  expect(
+    run(
+      parseArgs([
+        "--use-existing-coverage",
+        "--changed",
+        "--threshold",
+        "0",
+      ]),
+      io.host,
+    ),
+  ).toBe(2);
+  expect(io.stderr.text).toBe("CRAP threshold exceeded: 1 > 0\n");
 });
 
 test("createNodeHost runCommand returns the process exit code", () => {

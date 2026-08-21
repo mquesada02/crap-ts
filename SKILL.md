@@ -103,7 +103,7 @@ Exit codes: `0` success (including empty selection); `1` usage error, coverage-c
 
 1. Unless `--use-existing-coverage`, deletes the reports directory that would hold the LCOV file and runs the coverage command with inherited stdio
 2. Finds `.ts` `.tsx` `.mts` `.cts` files, skipping `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`, and tests. With `--changed`, candidates come from `git status` instead of a full walk.
-3. Extracts Functions (declarations, class instance/static Functions, `const`-bound arrows/functions) with line ranges
+3. Extracts Functions (declarations, class instance/static Functions, `const`-bound arrows/functions, object-literal methods, function-valued properties, and property assignments) with line ranges
 4. Computes cyclomatic complexity from Decision points (`if`, loops, `switch` cases, `catch`, ternary, `&&` `||` `??`, optional chain, logical assignment)
 5. Reads LCOV for per-Function line Coverage
 6. Applies CRAP formula: `CC² × (1 − coverage)³ + CC`

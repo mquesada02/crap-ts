@@ -5,7 +5,7 @@ A CLI that scores TypeScript functions by combining cyclomatic complexity with t
 ## Language
 
 **Function**:
-A named production callable that receives one report row: a function declaration, a class method (instance or static), a `const`-bound function/arrow, an object-literal method or function-valued property (any name, including computed, quoted, or numeric; whether or not the object itself is bound), or a function/arrow assigned to a property (any name, including computed, quoted, or numeric), at module, class, or nested scope. Not an anonymous callback, constructor, getter, setter, or test.
+A named production callable that receives one report row: a function declaration, a class method (instance or static), a `const`-, `let`-, or `var`-bound function/arrow, an object-literal method or function-valued property (any name, including computed, quoted, or numeric; whether or not the object itself is bound), or a function/arrow assigned to a property (any name, including computed, quoted, or numeric) or to an identifier, at module, class, or nested scope. Not an anonymous callback, constructor, getter, setter, or test.
 _Avoid_: method, callable, unit, symbol
 
 **CRAP**:

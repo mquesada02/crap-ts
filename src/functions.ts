@@ -30,9 +30,13 @@ export function extractFunctions(
       ts.forEachChild(node.body, (child) => visit(child, name));
       return;
     }
-    if (ts.isVariableStatement(node) && isConstList(node.declarationList)) {
+    if (ts.isVariableStatement(node) && isLetVarOrConstList(node.declarationList)) {
       for (const decl of node.declarationList.declarations) {
-        if (!ts.isIdentifier(decl.name) || decl.initializer === undefined) {
+        if (decl.initializer === undefined) {
+          continue;
+        }
+        if (!ts.isIdentifier(decl.name)) {
+          visit(decl.initializer, enclosingName);
           continue;
         }
         if (isFunctionLike(decl.initializer)) {
@@ -94,16 +98,15 @@ export function extractFunctions(
     enclosingName: string | undefined,
   ): boolean {
     if (
-      node.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-      !isFunctionLike(node.right) ||
-      !isPropertyWrite(node.left)
+      !isFunctionAssignmentOperator(node.operatorToken.kind) ||
+      !isFunctionLike(node.right)
     ) {
       return false;
     }
-    const name = qualify(
-      enclosingName,
-      assignedPropertyName(node.left, sourceFile),
-    );
+    if (!isFunctionAssignmentTarget(node.left)) {
+      return false;
+    }
+    const name = qualify(enclosingName, assignedName(node.left, sourceFile));
     functions.push(toFunction(node.right, name, filePath, sourceFile));
     ts.forEachChild(node.right, (child) => visit(child, name));
     return true;
@@ -147,8 +150,16 @@ function qualify(enclosingName: string | undefined, name: string): string {
   return enclosingName === undefined ? name : `${enclosingName}.${name}`;
 }
 
-function isConstList(list: ts.VariableDeclarationList): boolean {
-  return (list.flags & ts.NodeFlags.Const) !== 0;
+function isLetVarOrConstList(list: ts.VariableDeclarationList): boolean {
+  const flags = list.flags;
+  if ((flags & ts.NodeFlags.Using) !== 0) {
+    return false;
+  }
+  return (
+    (flags & ts.NodeFlags.Let) !== 0 ||
+    (flags & ts.NodeFlags.Const) !== 0 ||
+    flags === ts.NodeFlags.None
+  );
 }
 
 function isFunctionLike(
@@ -157,18 +168,40 @@ function isFunctionLike(
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node);
 }
 
-function isPropertyWrite(
+const FUNCTION_ASSIGNMENT_OPERATORS = new Set([
+  ts.SyntaxKind.EqualsToken,
+  ts.SyntaxKind.BarBarEqualsToken,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+  ts.SyntaxKind.QuestionQuestionEqualsToken,
+]);
+
+function isFunctionAssignmentOperator(kind: ts.SyntaxKind): boolean {
+  return FUNCTION_ASSIGNMENT_OPERATORS.has(kind);
+}
+
+function isFunctionAssignmentTarget(
   left: ts.Expression,
-): left is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+): left is
+  | ts.Identifier
+  | ts.PropertyAccessExpression
+  | ts.ElementAccessExpression {
   return (
-    ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)
+    ts.isIdentifier(left) ||
+    ts.isPropertyAccessExpression(left) ||
+    ts.isElementAccessExpression(left)
   );
 }
 
-function assignedPropertyName(
-  left: ts.PropertyAccessExpression | ts.ElementAccessExpression,
+function assignedName(
+  left:
+    | ts.Identifier
+    | ts.PropertyAccessExpression
+    | ts.ElementAccessExpression,
   sourceFile: ts.SourceFile,
 ): string {
+  if (ts.isIdentifier(left)) {
+    return left.text;
+  }
   if (ts.isPropertyAccessExpression(left)) {
     return left.name.getText(sourceFile);
   }
@@ -268,7 +301,7 @@ function isOwnRowRoot(node: ts.Node): boolean {
   }
   return (
     (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
-    (isConstBound(node) ||
+    (isLetVarOrConstBound(node) ||
       isFunctionValuedProperty(node) ||
       isAssignedFunction(node))
   );
@@ -288,13 +321,13 @@ function isAssignedFunction(node: ts.Node): boolean {
   return (
     parent !== undefined &&
     ts.isBinaryExpression(parent) &&
-    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    isFunctionAssignmentOperator(parent.operatorToken.kind) &&
     parent.right === node &&
-    isPropertyWrite(parent.left)
+    isFunctionAssignmentTarget(parent.left)
   );
 }
 
-function isConstBound(node: ts.Node): boolean {
+function isLetVarOrConstBound(node: ts.Node): boolean {
   const parent = node.parent;
   if (
     parent === undefined ||
@@ -305,7 +338,11 @@ function isConstBound(node: ts.Node): boolean {
     return false;
   }
   const list = parent.parent;
-  return ts.isVariableDeclarationList(list) && isConstList(list);
+  return (
+    ts.isVariableDeclarationList(list) &&
+    isLetVarOrConstList(list) &&
+    ts.isVariableStatement(list.parent)
+  );
 }
 
 function lineOf(sourceFile: ts.SourceFile, pos: number): number {

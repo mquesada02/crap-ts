@@ -392,15 +392,56 @@ foo[1] = () => {};
   expect(names).toEqual(["bar", "[key]", "['bar']", "[1]"]);
 });
 
+test("extracts identifier-assignment Functions", () => {
+  const extracted = extractFunctions(
+    `foo = () => {};
+foo = function () {};`,
+    "src/foo.ts",
+  );
+  expect(
+    extracted.map((fn) => ({
+      name: fn.name,
+      startLine: fn.startLine,
+      endLine: fn.endLine,
+    })),
+  ).toEqual([
+    { name: "foo", startLine: 1, endLine: 1 },
+    { name: "foo", startLine: 2, endLine: 2 },
+  ]);
+});
+
+test("extracts identifier logical-assignment Functions", () => {
+  const names = extractFunctions(
+    "foo ||= () => {}; bar &&= () => {}; baz ??= function () {};",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["foo", "bar", "baz"]);
+});
+
+test("extracts property logical-assignment Functions", () => {
+  const names = extractFunctions(
+    "foo.bar ||= () => {}; foo[key] &&= () => {}; foo['bar'] ??= function () {}; foo[1] ||= () => {};",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["bar", "[key]", "['bar']", "[1]"]);
+});
+
 test("prefixes assignment Functions with the enclosing Function", () => {
   const names = extractFunctions(
     `
-function parent() { foo.bar = () => {}; }
-class Widget { run() { this.helper = function () {}; } }
+function parent() { foo.bar = () => {}; foo = () => {}; }
+class Widget { run() { this.helper = function () {}; helper = () => {}; } }
 `,
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["parent", "parent.bar", "Widget.run", "Widget.run.helper"]);
+  expect(names).toEqual([
+    "parent",
+    "parent.bar",
+    "parent.foo",
+    "Widget.run",
+    "Widget.run.helper",
+    "Widget.run.helper",
+  ]);
 });
 
 test("does not extract an assignment Function from a constructor", () => {
@@ -441,6 +482,200 @@ test("does not count object-literal Decision points on the parent", () => {
   ]);
 });
 
+test("does not count identifier-assignment Decision points on the parent", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { foo = () => { if (x) { return 1; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.foo", complexity: 2 },
+  ]);
+});
+
+test("counts identifier logical-assignment as a parent Decision point", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { foo ||= () => { if (x) { return 1; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 2 },
+    { name: "parent.foo", complexity: 2 },
+  ]);
+});
+
+test("counts property logical-assignment as a parent Decision point", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { foo.bar ||= () => { if (x) { return 1; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 2 },
+    { name: "parent.bar", complexity: 2 },
+  ]);
+});
+
+test("prefixes a nested let-bound Function inside a class Function", () => {
+  const names = extractFunctions(
+    "class Widget { run() { let foo = () => {}; } }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.run", "Widget.run.foo"]);
+});
+
+test("does not count let-bound Decision points on the parent", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { let foo = () => { if (x) { return 1; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.foo", complexity: 2 },
+  ]);
+});
+
+test("counts Decision points in a mixed let list on the enclosing Function", () => {
+  expect(
+    extractFunctions(
+      "function parent(b: boolean, c: boolean) { let a = b && c, helper = () => 1; return a; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 2 },
+    { name: "parent.helper", complexity: 1 },
+  ]);
+});
+
+test("extracts async and generator let-bound Functions", () => {
+  const names = extractFunctions(
+    "let foo = async () => {}; let bar = async function* () {}; var gen = function* () {};",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["foo", "bar", "gen"]);
+});
+
+test("extracts each Function in a mixed let declarator list", () => {
+  const names = extractFunctions(
+    "let foo = () => {}, bar = () => {};",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["foo", "bar"]);
+});
+
+test("extracts let and var function-expression and export Functions", () => {
+  const names = extractFunctions(
+    `
+export let exported = () => {};
+export var also = function () {};
+let foo = function helper() {};
+var bar = function () {};
+`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["exported", "also", "foo", "bar"]);
+});
+
+test("does not extract a let or assignment Function that references another Function", () => {
+  const names = extractFunctions(
+    "function otherFn() {} let foo = otherFn; bar = otherFn; baz.qux ||= otherFn;",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["otherFn"]);
+});
+
+test("extracts chained assignment from the Function write only", () => {
+  const names = extractFunctions(
+    "foo = bar = () => {}; let baz = qux = function () {};",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["bar", "qux"]);
+});
+
+test("extracts let and var class-expression Functions with binding fallback", () => {
+  const names = extractFunctions(
+    `
+let X = class { m() {} };
+var Y = class { n() {} };
+let Z = class Named { p() {} };
+`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["X.m", "Y.n", "Named.p"]);
+});
+
+test("counts loop-header arrow Decision points on the enclosing Function", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { for (let fn = () => { if (x) { return 1; } }; false; ) {} }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([{ name: "parent", complexity: 3 }]);
+});
+
+test("does not extract loop-header bindings or destructuring bindings", () => {
+  const names = extractFunctions(
+    `
+function parent() {
+  for (let fn = () => {}; false; ) {}
+  for (const gn = () => {}; false; ) {}
+  let { foo } = { foo: () => {} };
+  let [bar] = [() => {}];
+}
+`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.foo"]);
+});
+
+test("extracts an identifier-assignment Function inside a loop body", () => {
+  const names = extractFunctions(
+    "function parent() { for (let i = 0; i < 1; i++) { foo = () => {}; } }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["parent", "parent.foo"]);
+});
+
+test("does not extract let or identifier-assignment Functions from a constructor", () => {
+  const names = extractFunctions(
+    "class Widget { constructor() { let foo = () => {}; foo = () => {}; this.bar ||= () => {}; } run() {} }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.run"]);
+});
+
+test("extracts two Function rows for a let binding and a later write", () => {
+  const extracted = extractFunctions(
+    `let foo = () => {};
+foo = () => {};`,
+    "src/foo.ts",
+  );
+  expect(
+    extracted.map((fn) => ({
+      name: fn.name,
+      startLine: fn.startLine,
+      endLine: fn.endLine,
+    })),
+  ).toEqual([
+    { name: "foo", startLine: 1, endLine: 1 },
+    { name: "foo", startLine: 2, endLine: 2 },
+  ]);
+});
+
+test("records line range of a let-bound Function", () => {
+  const [fn] = extractFunctions(
+    `let foo =
+  () => {
+    return 1;
+  };`,
+    "src/foo.ts",
+  );
+  expect(fn).toMatchObject({ name: "foo", startLine: 2, endLine: 4 });
+});
+
 test("does not count assignment Function Decision points on the parent", () => {
   expect(
     extractFunctions(
@@ -462,12 +697,19 @@ test("does not count assignment Function Decision points on the parent", () => {
   ]);
 });
 
-test("extracts object-literal Functions from a let object and skips let-bound functions", () => {
+test("extracts a var-bound arrow Function", () => {
+  const names = extractFunctions("var foo = () => 1;", "src/foo.ts").map(
+    (fn) => fn.name,
+  );
+  expect(names).toEqual(["foo"]);
+});
+
+test("extracts object-literal Functions from a let object and let-bound Functions", () => {
   const names = extractFunctions(
     "let api = { run() {} }; let foo = () => {};",
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["run"]);
+  expect(names).toEqual(["run", "foo"]);
 });
 
 test("records line range of the object-literal method and assignment Function", () => {

@@ -1,15 +1,15 @@
 ---
 name: crap-ts
-description: Use when the user asks for a CRAP report, cyclomatic complexity analysis, or code quality metrics on a TypeScript project
+description: Use when the user asks for a CRAP report, cyclomatic complexity analysis, or code quality metrics on a TypeScript and JavaScript project
 ---
 
-# crap-ts — CRAP Metric for TypeScript
+# crap-ts — CRAP Metric for TypeScript and JavaScript
 
-Computes the **CRAP** (Change Risk Anti-Pattern) score for every TypeScript Function. CRAP combines cyclomatic complexity with test Coverage to identify Functions that are both complex and under-tested.
+Computes the **CRAP** (Change Risk Anti-Pattern) score for every TypeScript and JavaScript Function. CRAP combines cyclomatic complexity with test Coverage to identify Functions that are both complex and under-tested.
 
 ## Setup
 
-From a TypeScript project root:
+From a TypeScript and JavaScript project root:
 
 ```bash
 npm install -g @mquesada02/crap-ts
@@ -29,7 +29,7 @@ The binary name is `crap-ts`.
 ## Usage
 
 ```bash
-# Analyze TypeScript files under the current directory
+# Analyze TypeScript and JavaScript files under the current directory
 crap-ts --json
 
 # Filter to specific path fragments
@@ -84,7 +84,7 @@ ok                             src/ok.ts                              1  100.0% 
     --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
     --json                    Print a JSON array of Function rows instead of the table.
-    --changed                 Analyze git-dirty TypeScript files in the working tree.
+    --changed                 Analyze git-dirty TypeScript and JavaScript files in the working tree.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`. `--coverage-command` replaces the default Vitest command entirely.
@@ -102,7 +102,7 @@ Exit codes: `0` success (including empty selection); `1` usage error, coverage-c
 ## How It Works
 
 1. Unless `--use-existing-coverage`, deletes the reports directory that would hold the LCOV file and runs the coverage command with inherited stdio
-2. Finds `.ts` `.tsx` `.mts` `.cts` files, skipping `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`, and tests. With `--changed`, candidates come from `git status` instead of a full walk.
+2. Finds `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` files, skipping `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`, and tests. With `--changed`, candidates come from `git status` instead of a full walk.
 3. Extracts Functions (declarations, class instance/static Functions, `const`/`let`/`var`-bound arrows/functions, object-literal methods, function-valued properties, property assignments, and identifier assignments (including logical assignment to identifiers and properties)) with line ranges
 4. Computes cyclomatic complexity from Decision points (`if`, loops, `switch` cases, `catch`, ternary, `&&` `||` `??`, optional chain, logical assignment)
 5. Reads LCOV for per-Function line Coverage

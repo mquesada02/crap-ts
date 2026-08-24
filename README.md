@@ -1,6 +1,6 @@
 # crap-ts
 
-**CRAP** (Change Risk Anti-Pattern) scores for TypeScript Functions.
+**CRAP** (Change Risk Anti-Pattern) scores for TypeScript and JavaScript Functions.
 
 Combines cyclomatic complexity with test Coverage to identify Functions that are both complex and under-tested — the riskiest code to change.
 
@@ -22,7 +22,7 @@ The binary name is `crap-ts`.
 
 ## Usage
 
-From a TypeScript project root:
+From a TypeScript and JavaScript project root:
 
 ```bash
 crap-ts
@@ -60,7 +60,7 @@ Print a JSON array of Function rows instead of the table:
 crap-ts --json
 ```
 
-Score only git-dirty TypeScript files in the working tree:
+Score only git-dirty TypeScript and JavaScript files in the working tree:
 
 ```bash
 crap-ts --changed
@@ -90,7 +90,7 @@ Unknown Coverage is `N/A`, never 0%. N/A rows sort after numeric CRAP.
     --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
     --json                    Print a JSON array of Function rows instead of the table.
-    --changed                 Analyze git-dirty TypeScript files in the working tree.
+    --changed                 Analyze git-dirty TypeScript and JavaScript files in the working tree.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`.
@@ -99,7 +99,7 @@ A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command
 
 Path-fragment arguments keep a file if any fragment is a substring of its working-directory-relative path. `--changed` cannot be combined with path-fragments.
 
-Analyzed extensions: `.ts`, `.tsx`, `.mts`, `.cts`. Skipped directories: `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`. Test files (`*.test.*`, `*.spec.*`, `__tests__/`) are skipped.
+Analyzed extensions: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`. Skipped directories: `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`. Test files (`*.test.*`, `*.spec.*`, `__tests__/`) are skipped.
 
 ## CRAP Formula
 

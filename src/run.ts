@@ -85,7 +85,7 @@ export function run(options: CliResult, host: RunHost): number {
   }
   if (files.length === 0) {
     host.stdout.write(
-      options.json ? formatJson([]) : "No TypeScript files to analyze.\n",
+      options.json ? formatJson([]) : "No source files to analyze.\n",
     );
     return 0;
   }
@@ -174,7 +174,16 @@ const SKIP_DIRECTORIES = new Set([
   "target",
 ]);
 
-const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts"];
+const SOURCE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+];
 
 function discoverChangedFiles(
   options: AnalyzeOptions,

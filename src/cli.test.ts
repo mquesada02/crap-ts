@@ -170,6 +170,23 @@ test("help message mentions --changed", () => {
   expect(result.message).toContain("--changed");
 });
 
+test("help tagline, --changed, and path-fragments say TypeScript and JavaScript", () => {
+  const result = parseArgs(["--help"]);
+  expect(result.action).toBe("help");
+  if (result.action !== "help") {
+    throw new Error("expected help");
+  }
+  expect(result.message).toContain(
+    "Scores TypeScript and JavaScript Functions with CRAP",
+  );
+  expect(result.message).toContain(
+    "Analyze git-dirty TypeScript and JavaScript files in the working tree",
+  );
+  expect(result.message).toContain(
+    "TypeScript and JavaScript files under the configured source roots",
+  );
+});
+
 test("--help wins when --changed is also present", () => {
   expect(parseArgs(["--changed", "--help"])).toMatchObject({ action: "help" });
 });

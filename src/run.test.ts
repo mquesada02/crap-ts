@@ -97,7 +97,7 @@ function project(files: Record<string, string> = {}) {
 test("empty selection prints a message and exits 0", () => {
   const io = project();
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
 });
 
 test("empty selection with --json prints an empty array and exits 0", () => {
@@ -120,12 +120,12 @@ test("declaration files are not analyzed", () => {
     "src/baz.d.cts": "export function baz(): number;",
   });
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
 });
 
-test("a .js --source-root file is ignored", () => {
+test("a .js --source-root file is analyzed", () => {
   const io = project({
-    "src/foo.js": "export function foo() { return 1; }",
+    "src/foo.js": "export function foo() {\n  return 1;\n}\n",
   });
   expect(
     run(
@@ -133,7 +133,32 @@ test("a .js --source-root file is ignored", () => {
       io.host,
     ),
   ).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).toContain("src/foo.js");
+});
+
+test("foo.ts and foo.js side by side are both scored", () => {
+  const io = project({
+    "src/foo.ts": "export function fooTs() {\n  return 1;\n}\n",
+    "src/foo.js": "export function fooJs() {\n  return 1;\n}\n",
+  });
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
+  expect(io.stdout.text).toContain("src/foo.ts");
+  expect(io.stdout.text).toContain("src/foo.js");
+  expect(io.stdout.text).toContain("fooTs");
+  expect(io.stdout.text).toContain("fooJs");
+});
+
+test("a path-fragment matching a .js path keeps that file", () => {
+  const io = project({
+    "src/foo.js": "export function foo() {\n  return 1;\n}\n",
+    "src/bar.ts": "export function bar() {\n  return 1;\n}\n",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "foo.js"]), io.host),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("src/foo.js");
+  expect(io.stdout.text).not.toContain("src/bar.ts");
 });
 
 test("a TypeScript --source-root file is analyzed", () => {
@@ -161,7 +186,7 @@ test("a nonexistent --source-root path is an empty selection", () => {
       io.host,
     ),
   ).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
 });
 
 test("a --source-root that is neither file nor directory is skipped", () => {
@@ -178,7 +203,7 @@ test("a --source-root that is neither file nor directory is skipped", () => {
       io.host,
     ),
   ).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
 });
 
 test("a --source-root stat error other than missing is not swallowed", () => {
@@ -193,9 +218,8 @@ test("a --source-root stat error other than missing is not swallowed", () => {
   ).toThrow(/EACCES/);
 });
 
-test("skips .js, test files, and skipped directories", () => {
+test("skips test files and skipped directories", () => {
   const io = project({
-    "src/foo.js": "export function foo() { return 1; }",
     "src/foo.test.ts": "function testFoo() { return 1; }",
     "src/foo.spec.ts": "function specFoo() { return 1; }",
     "src/__tests__/bar.ts": "function bar() { return 1; }",
@@ -207,7 +231,23 @@ test("skips .js, test files, and skipped directories", () => {
     "target/out.ts": "export function out() { return 1; }",
   });
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
+});
+
+test("analyzes production .js while still skipping tests and skip-dirs", () => {
+  const io = project({
+    "src/foo.js": "export function foo() {\n  return 1;\n}\n",
+    "src/foo.test.js": "function testFoo() { return 1; }",
+    "src/foo.spec.jsx": "function specFoo() { return 1; }",
+    "node_modules/lib/x.js": "export function x() { return 1; }",
+    "dist/out.js": "export function out() { return 1; }",
+  });
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
+  expect(io.stdout.text).toContain("src/foo.js");
+  expect(io.stdout.text).not.toContain("testFoo");
+  expect(io.stdout.text).not.toContain("specFoo");
+  expect(io.stdout.text).not.toContain("node_modules");
+  expect(io.stdout.text).not.toContain("dist/");
 });
 
 test("path-fragment args that match nothing yield empty selection", () => {
@@ -215,7 +255,7 @@ test("path-fragment args that match nothing yield empty selection", () => {
     "src/foo.ts": "export function foo() { return 1; }",
   });
   expect(run(parseArgs(["--use-existing-coverage", "zzz"]), io.host)).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
 });
 
 test("path-fragment filters match the working-directory-relative path", () => {
@@ -225,7 +265,7 @@ test("path-fragment filters match the working-directory-relative path", () => {
   expect(run(parseArgs(["--use-existing-coverage", "crap-ts"]), io.host)).toBe(
     0,
   );
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
 });
 
 test("prints a CRAP report from existing LCOV and exits 0", () => {
@@ -304,12 +344,16 @@ test("--lcov and --source-root join existing Coverage from those paths", () => {
   expect(io.stdout.text).not.toContain("bar");
 });
 
-test("includes .ts .tsx .mts .cts and path-fragment filters", () => {
+test("includes .ts .tsx .mts .cts .js .jsx .mjs .cjs and path-fragment filters", () => {
   const files = {
     "src/a.ts": "export function a() {\n  return 1;\n}\n",
     "src/b.tsx": "export function b() {\n  return 1;\n}\n",
     "src/c.mts": "export function c() {\n  return 1;\n}\n",
     "src/d.cts": "export function d() {\n  return 1;\n}\n",
+    "src/e.js": "export function e() {\n  return 1;\n}\n",
+    "src/f.jsx": "export function f() {\n  return 1;\n}\n",
+    "src/g.mjs": "export function g() {\n  return 1;\n}\n",
+    "src/h.cjs": "export function h() {\n  return 1;\n}\n",
   };
   const all = project(files);
   expect(run(parseArgs(["--use-existing-coverage"]), all.host)).toBe(0);
@@ -317,6 +361,10 @@ test("includes .ts .tsx .mts .cts and path-fragment filters", () => {
   expect(all.stdout.text).toContain("src/b.tsx");
   expect(all.stdout.text).toContain("src/c.mts");
   expect(all.stdout.text).toContain("src/d.cts");
+  expect(all.stdout.text).toContain("src/e.js");
+  expect(all.stdout.text).toContain("src/f.jsx");
+  expect(all.stdout.text).toContain("src/g.mjs");
+  expect(all.stdout.text).toContain("src/h.cjs");
 
   const filtered = project(files);
   expect(
@@ -326,6 +374,7 @@ test("includes .ts .tsx .mts .cts and path-fragment filters", () => {
   expect(filtered.stdout.text).not.toContain("src/a.ts");
   expect(filtered.stdout.text).not.toContain("src/c.mts");
   expect(filtered.stdout.text).not.toContain("src/d.cts");
+  expect(filtered.stdout.text).not.toContain("src/e.js");
 });
 
 test("unreadable source exits 1", () => {
@@ -349,6 +398,41 @@ test("parse error exits 1", () => {
   });
   expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(1);
   expect(io.stderr.text).toContain("src/foo.ts");
+});
+
+test("a .js file with type annotations is scored", () => {
+  const io = project({
+    "src/foo.js": "export function foo(x: number) {\n  return 1;\n}\n",
+  });
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).toContain("src/foo.js");
+});
+
+test("a .js file with JSX is scored", () => {
+  const io = project({
+    "src/foo.js": "export function Box() {\n  return <div/>;\n}\n",
+  });
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
+  expect(io.stdout.text).toContain("Box");
+  expect(io.stdout.text).toContain("src/foo.js");
+});
+
+test("a .jsx file with JSX is scored", () => {
+  const io = project({
+    "src/box.jsx": "export function Box() {\n  return <div/>;\n}\n",
+  });
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(0);
+  expect(io.stdout.text).toContain("Box");
+  expect(io.stdout.text).toContain("src/box.jsx");
+});
+
+test("a syntax error in a .js file exits 1", () => {
+  const io = project({
+    "src/foo.js": "function {",
+  });
+  expect(run(parseArgs(["--use-existing-coverage"]), io.host)).toBe(1);
+  expect(io.stderr.text).toContain("src/foo.js");
 });
 
 test("runs the default coverage command unless --use-existing-coverage", () => {
@@ -668,8 +752,26 @@ test("--changed with empty porcelain is an empty selection", () => {
     return 0;
   };
   expect(run(parseArgs(["--changed"]), io.host)).toBe(0);
-  expect(io.stdout.text).toBe("No TypeScript files to analyze.\n");
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
   expect(ran).toBe(false);
+});
+
+test("--changed scores a dirty .js file and drops dirty test .js", () => {
+  const io = project({
+    "src/foo.js": "export function foo() {\n  return 1;\n}\n",
+    "src/foo.test.js": "export function testFoo() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = () => ({
+    status: 0,
+    stdout: "M  src/foo.js\0?? src/foo.test.js\0",
+    stderr: "",
+  });
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--changed"]), io.host),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).toContain("src/foo.js");
+  expect(io.stdout.text).not.toContain("testFoo");
 });
 
 test("--changed skips deleted paths and test files", () => {

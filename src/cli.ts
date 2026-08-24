@@ -1,6 +1,6 @@
 export const HELP_MESSAGE = `Usage: crap-ts [path-fragment ...]
 
-Scores TypeScript Functions with CRAP and prints a table sorted worst first.
+Scores TypeScript and JavaScript Functions with CRAP and prints a table sorted worst first.
 
 Options:
   -h, --help                    Print this help message and exit.
@@ -10,11 +10,11 @@ Options:
       --coverage-command <cmd>  Coverage command to run instead of Vitest emitting LCOV.
       --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
       --json                    Print a JSON array of Function rows instead of the table.
-      --changed                 Analyze git-dirty TypeScript files in the working tree.
+      --changed                 Analyze git-dirty TypeScript and JavaScript files in the working tree.
 
 Arguments:
   path-fragment    Optional source path fragment. When present, only matching
-                   TypeScript files under the configured source roots are analyzed.
+                   TypeScript and JavaScript files under the configured source roots are analyzed.
 `;
 
 export const DEFAULT_LCOV_PATH = "coverage/lcov.info";

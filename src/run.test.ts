@@ -1139,3 +1139,33 @@ test("createNodeHost runCommand returns the process exit code", () => {
   expect(host.runCommand("true")).toBe(0);
   expect(host.runCommand("false")).toBe(1);
 });
+
+test("createNodeHost runCaptured returns status 1 for an empty argv", () => {
+  const host = createNodeHost();
+  expect(host.runCaptured([])).toEqual({
+    status: 1,
+    stdout: "",
+    stderr: "",
+  });
+});
+
+test("createNodeHost runCaptured captures stdout, stderr, and exit status", () => {
+  const host = createNodeHost();
+  expect(
+    host.runCaptured([
+      process.execPath,
+      "-e",
+      "process.stdout.write('out'); process.stderr.write('err')",
+    ]),
+  ).toEqual({ status: 0, stdout: "out", stderr: "err" });
+  expect(
+    host.runCaptured([process.execPath, "-e", "process.exit(2)"]),
+  ).toMatchObject({ status: 2 });
+});
+
+test("createNodeHost runCaptured returns status 1 when spawn fails", () => {
+  const host = createNodeHost();
+  expect(
+    host.runCaptured(["crap-ts-missing-command"]),
+  ).toMatchObject({ status: 1, stdout: "", stderr: "" });
+});

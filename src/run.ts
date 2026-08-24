@@ -21,7 +21,7 @@ import {
   sortByCrap,
   type CrapEntry,
 } from "./crap.js";
-import { extractFunctions } from "./functions.js";
+import { extractFunctions, type ExtractedFunction } from "./functions.js";
 
 export type RunHost = {
   cwd: string;
@@ -77,17 +77,26 @@ export function run(options: CliResult, host: RunHost): number {
     host.stderr.write(`${options.message}\n\n${HELP_MESSAGE}`);
     return 1;
   }
-  const files = options.changed
-    ? discoverChangedFiles(options, host)
-    : discoverFiles(options, host);
-  if (files === undefined) {
+  const gitSelect = options.changed || options.changedFunctions;
+  const dirty = gitSelect ? discoverChangedFiles(options, host) : undefined;
+  if (gitSelect && dirty === undefined) {
     return 1;
   }
+  const files = dirty
+    ? dirty.map((file) => file.path)
+    : discoverFiles(options, host);
   if (files.length === 0) {
-    host.stdout.write(
-      options.json ? formatJson([]) : "No source files to analyze.\n",
-    );
-    return 0;
+    return emptySelection(options, host);
+  }
+  let keptFunctions: ExtractedFunction[] | undefined;
+  if (options.changedFunctions && dirty !== undefined) {
+    keptFunctions = joinChangedFunctions(dirty, host);
+    if (keptFunctions === undefined) {
+      return 1;
+    }
+    if (keptFunctions.length === 0) {
+      return emptySelection(options, host);
+    }
   }
   if (!options.useExistingCoverage) {
     host.rm(dirname(resolve(host.cwd, options.lcovPath)));
@@ -98,33 +107,19 @@ export function run(options: CliResult, host: RunHost): number {
   }
   const coverage = loadCoverage(options, host);
   const entries: CrapEntry[] = [];
-  for (const file of files) {
-    let source: string;
-    try {
-      source = host.readFile(resolve(host.cwd, file));
-    } catch {
-      host.stderr.write(`Error: cannot read ${file}\n`);
-      return 1;
+  if (keptFunctions !== undefined) {
+    for (const fn of keptFunctions) {
+      entries.push(toEntry(fn, coverage));
     }
-    let functions;
-    try {
-      functions = extractFunctions(source, file);
-    } catch {
-      host.stderr.write(`Error: failed to parse ${file}\n`);
-      return 1;
-    }
-    for (const fn of functions) {
-      const coveragePct =
-        coverage === undefined
-          ? undefined
-          : coverageForRange(coverage, fn.namespace, fn.startLine, fn.endLine);
-      entries.push({
-        name: fn.name,
-        namespace: fn.namespace,
-        complexity: fn.complexity,
-        coverage: coveragePct,
-        crap: crapScore(fn.complexity, coveragePct),
-      });
+  } else {
+    for (const file of files) {
+      const functions = readFunctions(file, host);
+      if (functions === undefined) {
+        return 1;
+      }
+      for (const fn of functions) {
+        entries.push(toEntry(fn, coverage));
+      }
     }
   }
   const sorted = sortByCrap(entries);
@@ -146,6 +141,137 @@ export function run(options: CliResult, host: RunHost): number {
     }
   }
   return 0;
+}
+
+function writeGitError(
+  host: RunHost,
+  command: "status" | "diff",
+  stderr: string,
+): void {
+  const detail = stderr.trim();
+  host.stderr.write(
+    detail === ""
+      ? `Error: git ${command} failed\n`
+      : `Error: git ${command} failed\n${detail}\n`,
+  );
+}
+
+function emptySelection(options: AnalyzeOptions, host: RunHost): number {
+  host.stdout.write(
+    options.json ? formatJson([]) : "No source files to analyze.\n",
+  );
+  return 0;
+}
+
+function toEntry(
+  fn: ExtractedFunction,
+  coverage: LcovCoverage | undefined,
+): CrapEntry {
+  const coveragePct =
+    coverage === undefined
+      ? undefined
+      : coverageForRange(coverage, fn.namespace, fn.startLine, fn.endLine);
+  return {
+    name: fn.name,
+    namespace: fn.namespace,
+    complexity: fn.complexity,
+    coverage: coveragePct,
+    crap: crapScore(fn.complexity, coveragePct),
+  };
+}
+
+function joinChangedFunctions(
+  dirty: DirtyFile[],
+  host: RunHost,
+): ExtractedFunction[] | undefined {
+  const kept: ExtractedFunction[] = [];
+  for (const file of dirty) {
+    if (!file.untracked) {
+      const diff = host.runCaptured([
+        "git",
+        "-C",
+        host.cwd,
+        "diff",
+        "HEAD",
+        "-U0",
+        "--",
+        file.path,
+      ]);
+      if (diff.status !== 0) {
+        writeGitError(host, "diff", diff.stderr);
+        return undefined;
+      }
+      const lines = hunkNewLines(diff.stdout);
+      if (lines.size === 0) {
+        continue;
+      }
+      const functions = readFunctions(file.path, host);
+      if (functions === undefined) {
+        return undefined;
+      }
+      for (const fn of functions) {
+        if (rangeOverlaps(fn.startLine, fn.endLine, lines)) {
+          kept.push(fn);
+        }
+      }
+      continue;
+    }
+    const functions = readFunctions(file.path, host);
+    if (functions === undefined) {
+      return undefined;
+    }
+    kept.push(...functions);
+  }
+  return kept;
+}
+
+function readFunctions(
+  file: string,
+  host: RunHost,
+): ExtractedFunction[] | undefined {
+  let source: string;
+  try {
+    source = host.readFile(resolve(host.cwd, file));
+  } catch {
+    host.stderr.write(`Error: cannot read ${file}\n`);
+    return undefined;
+  }
+  try {
+    return extractFunctions(source, file);
+  } catch {
+    host.stderr.write(`Error: failed to parse ${file}\n`);
+    return undefined;
+  }
+}
+
+function hunkNewLines(diff: string): Set<number> {
+  const lines = new Set<number>();
+  const header = /^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@/gm;
+  for (const match of diff.matchAll(header)) {
+    const start = Number(match[1]);
+    const count = match[2] === undefined ? 1 : Number(match[2]);
+    if (count === 0) {
+      lines.add(start);
+      continue;
+    }
+    for (let line = start; line < start + count; line++) {
+      lines.add(line);
+    }
+  }
+  return lines;
+}
+
+function rangeOverlaps(
+  start: number,
+  end: number,
+  lines: Set<number>,
+): boolean {
+  for (let line = start; line <= end; line++) {
+    if (lines.has(line)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function loadCoverage(
@@ -185,10 +311,12 @@ const SOURCE_EXTENSIONS = [
   ".cjs",
 ];
 
+type DirtyFile = { path: string; untracked: boolean };
+
 function discoverChangedFiles(
   options: AnalyzeOptions,
   host: RunHost,
-): string[] | undefined {
+): DirtyFile[] | undefined {
   const git = host.runCaptured([
     "git",
     "-C",
@@ -199,18 +327,17 @@ function discoverChangedFiles(
     "--untracked-files=all",
   ]);
   if (git.status !== 0) {
-    const detail = git.stderr.trim();
-    host.stderr.write(
-      detail === ""
-        ? "Error: git status failed\n"
-        : `Error: git status failed\n${detail}\n`,
-    );
+    writeGitError(host, "status", git.stderr);
     return undefined;
   }
-  const files: string[] = [];
-  for (const relative of porcelainPaths(git.stdout)) {
-    const posix = posixify(relative);
-    if (!isUnderSourceRoots(posix, options.sourceRoots, host.cwd)) {
+  const files: DirtyFile[] = [];
+  const seen = new Set<string>();
+  for (const record of porcelainRecords(git.stdout)) {
+    const posix = posixify(record.path);
+    if (
+      seen.has(posix) ||
+      !isUnderSourceRoots(posix, options.sourceRoots, host.cwd)
+    ) {
       continue;
     }
     const absolute = resolve(host.cwd, posix);
@@ -228,15 +355,18 @@ function discoverChangedFiles(
       !isSkippedPath(posix) &&
       isAnalyzableFile(dirname(absolute), basename(absolute))
     ) {
-      files.push(posix);
+      seen.add(posix);
+      files.push({ path: posix, untracked: record.untracked });
     }
   }
-  return [...new Set(files)].sort();
+  return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-function porcelainPaths(porcelain: string): string[] {
+function porcelainRecords(
+  porcelain: string,
+): { path: string; untracked: boolean }[] {
   const parts = porcelain.split("\0");
-  const paths: string[] = [];
+  const records: { path: string; untracked: boolean }[] = [];
   for (let i = 0; i < parts.length; i++) {
     const record = parts[i];
     if (record === undefined || record.length < 4) {
@@ -247,13 +377,13 @@ function porcelainPaths(porcelain: string): string[] {
     if (path === "") {
       continue;
     }
-    paths.push(path);
+    records.push({ path, untracked: xy === "??" });
     // Porcelain v1 -z rename/copy is `XY dest\0orig\0`. Keep dest, skip orig.
     if (xy.includes("R") || xy.includes("C")) {
       i += 1;
     }
   }
-  return paths;
+  return records;
 }
 
 function isUnderSourceRoots(

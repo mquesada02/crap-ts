@@ -695,6 +695,254 @@ test("parse error with --json exits 1 without JSON", () => {
   expect(io.stdout.text).toBe("");
 });
 
+const twoFunctions = `export function foo() {
+  return 1;
+}
+export function bar() {
+  return 2;
+}
+`;
+
+test("--changed-functions keeps only Functions overlapping a hunk", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  const argv: string[][] = [];
+  io.host.runCaptured = (args) => {
+    argv.push(args);
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return { status: 0, stdout: "@@ -2,1 +2,1 @@\n", stderr: "" };
+  };
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--changed-functions"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(argv[0]).toEqual([
+    "git",
+    "-C",
+    io.host.cwd,
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
+  expect(argv[1]).toEqual([
+    "git",
+    "-C",
+    io.host.cwd,
+    "diff",
+    "HEAD",
+    "-U0",
+    "--",
+    "src/foo.ts",
+  ]);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("bar");
+});
+
+test("--changed on the same tree still keeps both Functions", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  const argv: string[][] = [];
+  io.host.runCaptured = (args) => {
+    argv.push(args);
+    return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+  };
+  expect(
+    run(parseArgs(["--use-existing-coverage", "--changed"]), io.host),
+  ).toBe(0);
+  expect(argv).toHaveLength(1);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).toContain("bar");
+});
+
+test("--changed-functions scores every Function in an untracked file", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  const argv: string[][] = [];
+  io.host.runCaptured = (args) => {
+    argv.push(args);
+    return { status: 0, stdout: "?? src/foo.ts\0", stderr: "" };
+  };
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--changed-functions"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(argv).toHaveLength(1);
+  expect(argv[0]?.includes("diff")).toBe(false);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).toContain("bar");
+});
+
+test("--changed-functions drops a tracked dirty file with no hunks", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  let ran = false;
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  io.host.runCommand = () => {
+    ran = true;
+    return 0;
+  };
+  expect(run(parseArgs(["--changed-functions"]), io.host)).toBe(0);
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
+  expect(ran).toBe(false);
+});
+
+test("--changed-functions joins a delete-only hunk", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return { status: 0, stdout: "@@ -2,1 +2,0 @@\n", stderr: "" };
+  };
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--changed-functions"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("bar");
+});
+
+test("--changed-functions import-only hunk is an empty selection", () => {
+  const io = project({
+    "src/foo.ts": `import { x } from "./x";\n\nexport function foo() {\n  return 1;\n}\n`,
+  });
+  let ran = false;
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return { status: 0, stdout: "@@ -1,1 +1,1 @@\n", stderr: "" };
+  };
+  io.host.runCommand = () => {
+    ran = true;
+    return 0;
+  };
+  expect(run(parseArgs(["--changed-functions"]), io.host)).toBe(0);
+  expect(io.stdout.text).toBe("No source files to analyze.\n");
+  expect(ran).toBe(false);
+});
+
+test("--changed-functions git diff failure exits 1 without a report", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return {
+      status: 128,
+      stdout: "",
+      stderr: "fatal: bad revision",
+    };
+  };
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--changed-functions"]),
+      io.host,
+    ),
+  ).toBe(1);
+  expect(io.stderr.text).toContain("Error: git diff failed");
+  expect(io.stderr.text).toContain("fatal: bad revision");
+  expect(io.stdout.text).toBe("");
+});
+
+test("--json --changed-functions still prints JSON", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+  });
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return { status: 0, stdout: "@@ -2,1 +2,1 @@\n", stderr: "" };
+  };
+  expect(
+    run(
+      parseArgs(["--use-existing-coverage", "--json", "--changed-functions"]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toContain('"function": "foo"');
+  expect(io.stdout.text).not.toContain('"function": "bar"');
+});
+
+test("--changed-functions with --threshold still applies the Quality gate", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+    "coverage/lcov.info": "SF:src/foo.ts\nDA:2,1\nend_of_record\n",
+  });
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return { status: 0, stdout: "M  src/foo.ts\0", stderr: "" };
+    }
+    return { status: 0, stdout: "@@ -2,1 +2,1 @@\n", stderr: "" };
+  };
+  expect(
+    run(
+      parseArgs([
+        "--use-existing-coverage",
+        "--changed-functions",
+        "--threshold",
+        "0",
+      ]),
+      io.host,
+    ),
+  ).toBe(2);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stderr.text).toContain("CRAP threshold exceeded:");
+});
+
+test("--changed-functions drops dirty files outside --source-root", () => {
+  const io = project({
+    "src/foo.ts": twoFunctions,
+    "other/bar.ts": "export function other() {\n  return 1;\n}\n",
+  });
+  io.host.runCaptured = (args) => {
+    if (args.includes("status")) {
+      return {
+        status: 0,
+        stdout: "M  src/foo.ts\0M  other/bar.ts\0",
+        stderr: "",
+      };
+    }
+    return { status: 0, stdout: "@@ -2,1 +2,1 @@\n", stderr: "" };
+  };
+  expect(
+    run(
+      parseArgs([
+        "--use-existing-coverage",
+        "--changed-functions",
+        "--source-root",
+        "src",
+      ]),
+      io.host,
+    ),
+  ).toBe(0);
+  expect(io.stdout.text).toContain("foo");
+  expect(io.stdout.text).not.toContain("other");
+});
+
 test("--changed scores only dirty files", () => {
   const io = project({
     "src/foo.ts": "export function foo() {\n  return 1;\n}\n",

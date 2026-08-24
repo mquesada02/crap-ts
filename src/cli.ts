@@ -11,6 +11,7 @@ Options:
       --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
       --json                    Print a JSON array of Function rows instead of the table.
       --changed                 Analyze git-dirty TypeScript and JavaScript files in the working tree.
+      --changed-functions       Analyze Functions in git-dirty files that overlap a working-tree diff hunk.
 
 Arguments:
   path-fragment    Optional source path fragment. When present, only matching
@@ -30,6 +31,7 @@ export type AnalyzeOptions = {
   threshold: number | undefined;
   json: boolean;
   changed: boolean;
+  changedFunctions: boolean;
   pathFragments: string[];
 };
 
@@ -65,6 +67,7 @@ export function parseArgs(args: string[]): CliResult {
     threshold: undefined,
     json: false,
     changed: false,
+    changedFunctions: false,
     pathFragments: [],
   };
   let coverageCommandGiven = false;
@@ -83,6 +86,10 @@ export function parseArgs(args: string[]): CliResult {
     }
     if (arg === "--changed") {
       options.changed = true;
+      continue;
+    }
+    if (arg === "--changed-functions") {
+      options.changedFunctions = true;
       continue;
     }
     if (arg === "--source-root" || arg === "-s") {
@@ -134,10 +141,23 @@ export function parseArgs(args: string[]): CliResult {
     }
     options.pathFragments.push(arg);
   }
+  if (options.changed && options.changedFunctions) {
+    return {
+      action: "error",
+      message: "--changed cannot be combined with --changed-functions",
+    };
+  }
   if (options.changed && options.pathFragments.length > 0) {
     return {
       action: "error",
       message: "--changed cannot be combined with path-fragment arguments",
+    };
+  }
+  if (options.changedFunctions && options.pathFragments.length > 0) {
+    return {
+      action: "error",
+      message:
+        "--changed-functions cannot be combined with path-fragment arguments",
     };
   }
   if (options.sourceRoots.length === 0) {

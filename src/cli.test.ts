@@ -25,6 +25,7 @@ test("no args analyze with default LCOV, coverage command, cwd root, and no filt
     threshold: undefined,
     json: false,
     changed: false,
+    changedFunctions: false,
     pathFragments: [],
   });
 });
@@ -55,6 +56,7 @@ test("parses flags, repeatable source roots, and path-fragment args", () => {
     threshold: 8,
     json: false,
     changed: false,
+    changedFunctions: false,
     pathFragments: ["foo", "bar"],
   });
 });
@@ -189,6 +191,62 @@ test("help tagline, --changed, and path-fragments say TypeScript and JavaScript"
 
 test("--help wins when --changed is also present", () => {
   expect(parseArgs(["--changed", "--help"])).toMatchObject({ action: "help" });
+});
+
+test("--changed-functions sets changedFunctions true", () => {
+  expect(parseArgs(["--changed-functions"])).toMatchObject({
+    action: "analyze",
+    changedFunctions: true,
+    changed: false,
+  });
+});
+
+test("--changed-functions with a path-fragment is a usage error", () => {
+  const result = parseArgs(["--changed-functions", "src/auth"]);
+  expect(result.action).toBe("error");
+  if (result.action !== "error") {
+    throw new Error("expected error");
+  }
+  expect(result.message).toContain(
+    "--changed-functions cannot be combined with path-fragment arguments",
+  );
+});
+
+test("--changed and --changed-functions together is a usage error", () => {
+  const result = parseArgs(["--changed", "--changed-functions"]);
+  expect(result.action).toBe("error");
+  if (result.action !== "error") {
+    throw new Error("expected error");
+  }
+  expect(result.message).toContain(
+    "--changed cannot be combined with --changed-functions",
+  );
+});
+
+test("--changed-functions=true is an unknown option", () => {
+  const result = parseArgs(["--changed-functions=true"]);
+  expect(result.action).toBe("error");
+  if (result.action !== "error") {
+    throw new Error("expected error");
+  }
+  expect(result.message).toContain("Unknown option: --changed-functions=true");
+});
+
+test("help message mentions --changed-functions", () => {
+  const result = parseArgs(["--help"]);
+  expect(result.action).toBe("help");
+  if (result.action !== "help") {
+    throw new Error("expected help");
+  }
+  expect(result.message).toContain(
+    "Analyze Functions in git-dirty files that overlap a working-tree diff hunk.",
+  );
+});
+
+test("--help wins when --changed-functions is also present", () => {
+  expect(parseArgs(["--changed-functions", "--help"])).toMatchObject({
+    action: "help",
+  });
 });
 
 test("non-numeric or negative --threshold is a usage error", () => {

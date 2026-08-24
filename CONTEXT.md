@@ -1,6 +1,6 @@
 # CRAP for TypeScript
 
-A CLI that scores TypeScript functions by combining cyclomatic complexity with test coverage, so the riskiest code to change is visible.
+A CLI that scores TypeScript and JavaScript functions by combining cyclomatic complexity with test coverage, so the riskiest code to change is visible.
 
 ## Language
 

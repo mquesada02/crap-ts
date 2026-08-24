@@ -107,7 +107,7 @@ Exit codes: `0` success (including empty selection); `1` usage error, coverage-c
 
 1. Unless `--use-existing-coverage`, deletes the reports directory that would hold the LCOV file and runs the coverage command with inherited stdio
 2. Finds `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` files, skipping `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`, and tests. With `--changed` or `--changed-functions`, candidates come from `git status` instead of a full walk. `--changed-functions` then keeps Functions whose lines overlap a `git diff HEAD -U0` hunk.
-3. Extracts Functions (declarations, class instance/static Functions, `const`/`let`/`var`-bound arrows/functions, object-literal methods, function-valued properties, property assignments, and identifier assignments (including logical assignment to identifiers and properties)) with line ranges
+3. Extracts Functions (declarations, class constructors/getters/setters/instance/static Functions, `const`/`let`/`var`-bound arrows/functions, object-literal methods/getters/setters, function-valued properties, property assignments, and identifier assignments (including logical assignment to identifiers and properties)) with line ranges. Getter and setter names mark `get`/`set` (`Widget.get hidden`, `Widget.set hidden`, `get x`, `set x`).
 4. Computes cyclomatic complexity from Decision points (`if`, loops, `switch` cases, `catch`, ternary, `&&` `||` `??`, optional chain, logical assignment)
 5. Reads LCOV for per-Function line Coverage
 6. Applies CRAP formula: `CC² × (1 − coverage)³ + CC`

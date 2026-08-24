@@ -81,6 +81,26 @@ export function extractFunctions(
       return;
     }
     for (const member of node.members) {
+      if (ts.isConstructorDeclaration(member) && member.body !== undefined) {
+        const name = qualify(enclosingName, `${typeName}.constructor`);
+        functions.push(toFunction(member, name, filePath, sourceFile));
+        ts.forEachChild(member.body, (child) => visit(child, name));
+        continue;
+      }
+      if (
+        (ts.isGetAccessorDeclaration(member) ||
+          ts.isSetAccessorDeclaration(member)) &&
+        member.body !== undefined
+      ) {
+        const kind = ts.isGetAccessorDeclaration(member) ? "get" : "set";
+        const name = qualify(
+          enclosingName,
+          `${typeName}.${kind} ${member.name.getText(sourceFile)}`,
+        );
+        functions.push(toFunction(member, name, filePath, sourceFile));
+        ts.forEachChild(member.body, (child) => visit(child, name));
+        continue;
+      }
       if (!ts.isMethodDeclaration(member) || member.body === undefined) {
         continue;
       }
@@ -118,15 +138,20 @@ export function extractFunctions(
   ): void {
     for (const prop of node.properties) {
       if (
-        ts.isGetAccessorDeclaration(prop) ||
-        ts.isSetAccessorDeclaration(prop)
+        (ts.isGetAccessorDeclaration(prop) ||
+          ts.isSetAccessorDeclaration(prop)) &&
+        prop.body !== undefined
       ) {
+        const kind = ts.isGetAccessorDeclaration(prop) ? "get" : "set";
+        const name = qualify(
+          enclosingName,
+          `${kind} ${prop.name.getText(sourceFile)}`,
+        );
+        functions.push(toFunction(prop, name, filePath, sourceFile));
+        ts.forEachChild(prop.body, (child) => visit(child, name));
         continue;
       }
       if (ts.isMethodDeclaration(prop) && prop.body !== undefined) {
-        if (isObjectLiteralConstructor(prop)) {
-          continue;
-        }
         const name = qualify(enclosingName, prop.name.getText(sourceFile));
         functions.push(toFunction(prop, name, filePath, sourceFile));
         ts.forEachChild(prop.body, (child) => visit(child, name));
@@ -206,10 +231,6 @@ function assignedName(
     return left.name.getText(sourceFile);
   }
   return `[${left.argumentExpression.getText(sourceFile)}]`;
-}
-
-function isObjectLiteralConstructor(prop: ts.MethodDeclaration): boolean {
-  return ts.isIdentifier(prop.name) && prop.name.text === "constructor";
 }
 
 function toFunction(
@@ -294,6 +315,14 @@ function isOwnRowRoot(node: ts.Node): boolean {
     return true;
   }
   if (ts.isMethodDeclaration(node) && node.body !== undefined) {
+    return true;
+  }
+  if (
+    (ts.isConstructorDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)) &&
+    node.body !== undefined
+  ) {
     return true;
   }
   if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {

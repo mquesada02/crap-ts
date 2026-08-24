@@ -32,6 +32,310 @@ test("extracts a class instance Function as Type.name", () => {
   });
 });
 
+test("extracts a class constructor as Type.constructor", () => {
+  const [fn] = extractFunctions(
+    "class Widget { constructor() {} }",
+    "src/widget.ts",
+  );
+  expect(fn).toMatchObject({
+    name: "Widget.constructor",
+    namespace: "src/widget.ts",
+    complexity: 1,
+  });
+});
+
+test("counts constructor Decision points on the constructor Function", () => {
+  const [fn] = extractFunctions(
+    "class Widget { constructor(ready: boolean) { if (!ready) throw new Error(); } }",
+    "src/widget.ts",
+  );
+  expect(fn).toMatchObject({ name: "Widget.constructor", complexity: 2 });
+});
+
+test("extracts class getters and setters with get/set names", () => {
+  const names = extractFunctions(
+    "class Widget { get hidden() { return this._hidden; } set hidden(value: boolean) { this._hidden = value; } }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.get hidden", "Widget.set hidden"]);
+});
+
+test("empty class getters and setters are CC 1", () => {
+  expect(
+    extractFunctions(
+      "class Widget { get hidden() {} set hidden(v: boolean) {} }",
+      "src/widget.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "Widget.get hidden", complexity: 1 },
+    { name: "Widget.set hidden", complexity: 1 },
+  ]);
+});
+
+test("names computed accessors from the name source text", () => {
+  const names = extractFunctions(
+    "class Widget { get [key]() { return 1; } set [key](v: number) {} }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.get [key]", "Widget.set [key]"]);
+});
+
+test("names quoted accessors from the name source text", () => {
+  const names = extractFunctions(
+    `const api = { get "x"() { return 1; }, set 1(v: number) {} };`,
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(['get "x"', "set 1"]);
+});
+
+test("empty object-literal constructor and accessors are CC 1", () => {
+  expect(
+    extractFunctions(
+      "const api = { constructor() {}, get x() {}, set x(v: number) {} };",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "constructor", complexity: 1 },
+    { name: "get x", complexity: 1 },
+    { name: "set x", complexity: 1 },
+  ]);
+});
+
+test("does not add a static prefix to accessor Functions", () => {
+  const names = extractFunctions(
+    "class Widget { static get hidden() { return 1; } static set hidden(v: number) {} }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.get hidden", "Widget.set hidden"]);
+});
+
+test("extracts an async getter without an async name prefix", () => {
+  const names = extractFunctions(
+    "class Widget { async get x() { return 1; } }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.get x"]);
+});
+
+test("prefixes nested class constructor and accessors with the enclosing Function", () => {
+  const names = extractFunctions(
+    "function parent() { class Widget { constructor() {} get hidden() { return 1; } } }",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual([
+    "parent",
+    "parent.Widget.constructor",
+    "parent.Widget.get hidden",
+  ]);
+});
+
+test("uses class-expression binding fallback for a constructor", () => {
+  const names = extractFunctions(
+    "const X = class { constructor() {} }; const Y = class Named { constructor() {} };",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["X.constructor", "Named.constructor"]);
+});
+
+test("does not count super or default parameters as constructor Decision points", () => {
+  const [fn] = extractFunctions(
+    "class Widget extends Base { constructor(private ready: boolean, x = 1) { super(ready); } }",
+    "src/widget.ts",
+  );
+  expect(fn).toMatchObject({ name: "Widget.constructor", complexity: 1 });
+});
+
+test("does not extract constructor parameter properties as Functions", () => {
+  const names = extractFunctions(
+    "class Widget { constructor(private ready: boolean) {} }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.constructor"]);
+});
+
+test("skips bodyless constructor overloads and bodyless accessors", () => {
+  const names = extractFunctions(
+    `
+class Widget {
+  constructor(x: number);
+  constructor(x: string);
+  constructor(x: number | string) {}
+  get y(): number;
+  set y(v: number);
+}
+abstract class Base {
+  abstract get z(): number;
+  abstract set z(v: number);
+}
+`,
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.constructor"]);
+});
+
+test("extracts a private constructor", () => {
+  const names = extractFunctions(
+    "class Widget { private constructor() {} }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.constructor"]);
+});
+
+test("extracts a protected constructor", () => {
+  const names = extractFunctions(
+    "class Widget { protected constructor() {} }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.constructor"]);
+});
+
+test("names private accessors from the name source text", () => {
+  const names = extractFunctions(
+    "class Widget { get #hidden() { return 1; } set #hidden(v: boolean) {} }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual(["Widget.get #hidden", "Widget.set #hidden"]);
+});
+
+test("does not count setter default parameters as Decision points", () => {
+  const [fn] = extractFunctions(
+    "class Widget { set hidden(v: boolean = true) {} }",
+    "src/widget.ts",
+  );
+  expect(fn).toMatchObject({ name: "Widget.set hidden", complexity: 1 });
+});
+
+test("counts anonymous-callback Decision points on a setter", () => {
+  expect(
+    extractFunctions(
+      "class Widget { set hidden(v: boolean) { [].map((n) => (n ? 1 : 0)); } }",
+      "src/widget.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([{ name: "Widget.set hidden", complexity: 2 }]);
+});
+
+test("records line range of a class setter and object-literal constructor", () => {
+  const classSetter = extractFunctions(
+    `class Widget {
+  set hidden(v: boolean) {
+    this._hidden = v;
+  }
+}`,
+    "src/widget.ts",
+  )[0];
+  expect(classSetter).toMatchObject({
+    name: "Widget.set hidden",
+    startLine: 2,
+    endLine: 4,
+  });
+  const [ol] = extractFunctions(
+    `const api = {
+  constructor() {
+    return;
+  }
+};`,
+    "src/foo.ts",
+  );
+  expect(ol).toMatchObject({
+    name: "constructor",
+    startLine: 2,
+    endLine: 4,
+  });
+});
+
+test("extracts nested production Functions from object-literal accessors", () => {
+  const names = extractFunctions(
+    "const api = { get x() { let foo = () => {}; function helper() {} return 1; }, set x(v: number) { bar = () => {}; this.qux ||= () => {}; } };",
+    "src/foo.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual([
+    "get x",
+    "get x.foo",
+    "get x.helper",
+    "set x",
+    "set x.bar",
+    "set x.qux",
+  ]);
+});
+
+test("counts anonymous-callback Decision points on the constructor", () => {
+  expect(
+    extractFunctions(
+      "class Widget { constructor() { [].map((n) => (n ? 1 : 0)); } }",
+      "src/widget.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([{ name: "Widget.constructor", complexity: 2 }]);
+});
+
+test("does not count a nested named Function's Decision points on the constructor", () => {
+  expect(
+    extractFunctions(
+      "class Widget { constructor() { function helper(y: boolean) { if (y) { return 1; } } } }",
+      "src/widget.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "Widget.constructor", complexity: 1 },
+    { name: "Widget.constructor.helper", complexity: 2 },
+  ]);
+});
+
+test("records line range of a class constructor", () => {
+  const [fn] = extractFunctions(
+    `class Widget {
+  constructor() {
+    return;
+  }
+}`,
+    "src/widget.ts",
+  );
+  expect(fn).toMatchObject({
+    name: "Widget.constructor",
+    startLine: 2,
+    endLine: 4,
+  });
+});
+
+test("extracts nested production Functions from class getters and setters", () => {
+  const names = extractFunctions(
+    "class Widget { get hidden() { const foo = () => {}; function helper() {} return 1; } set hidden(v: boolean) { this.bar = () => {}; baz = () => {}; this.qux ||= () => {}; } }",
+    "src/widget.ts",
+  ).map((fn) => fn.name);
+  expect(names).toEqual([
+    "Widget.get hidden",
+    "Widget.get hidden.foo",
+    "Widget.get hidden.helper",
+    "Widget.set hidden",
+    "Widget.set hidden.bar",
+    "Widget.set hidden.baz",
+    "Widget.set hidden.qux",
+  ]);
+});
+
+test("records line range of a class getter", () => {
+  const [fn] = extractFunctions(
+    `class Widget {
+  get hidden() {
+    return 1;
+  }
+}`,
+    "src/widget.ts",
+  );
+  expect(fn).toMatchObject({
+    name: "Widget.get hidden",
+    startLine: 2,
+    endLine: 4,
+  });
+});
+
+test("counts anonymous-callback Decision points on a getter", () => {
+  expect(
+    extractFunctions(
+      "class Widget { get hidden() { return [].map((n) => (n ? 1 : 0)); } }",
+      "src/widget.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([{ name: "Widget.get hidden", complexity: 2 }]);
+});
+
 test("extracts a const-bound arrow Function", () => {
   const [fn] = extractFunctions(
     "const foo = () => 1;",
@@ -148,7 +452,7 @@ test("does not count else, default parameters, or destructuring defaults", () =>
   ).toBe(1);
 });
 
-test("skips constructors, getters, setters, anonymous callbacks, and anonymous default exports", () => {
+test("skips anonymous callbacks and anonymous default exports", () => {
   const names = extractFunctions(
     `
 class Widget {
@@ -165,7 +469,14 @@ function parent() {
 `,
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["Widget.run", "Widget.create", "parent"]);
+  expect(names).toEqual([
+    "Widget.constructor",
+    "Widget.get x",
+    "Widget.set x",
+    "Widget.run",
+    "Widget.create",
+    "parent",
+  ]);
 });
 
 test("extracts const-bound function expressions and class-expression Functions", () => {
@@ -348,13 +659,13 @@ test("uses the property name over an inner function name", () => {
 
 test("does not extract a property that references another Function", () => {
   const names = extractFunctions(
-    "function otherFn() {} const api = { run: otherFn, get x() { return 1; } };",
+    "function otherFn() {} const api = { run: otherFn };",
     "src/foo.ts",
   ).map((fn) => fn.name);
   expect(names).toEqual(["otherFn"]);
 });
 
-test("does not extract object-literal constructors, getters, or setters", () => {
+test("extracts object-literal constructors, getters, and setters", () => {
   const names = extractFunctions(
     `
 function parent() {
@@ -368,7 +679,17 @@ function parent() {
 `,
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["parent", "parent.run"]);
+  expect(names).toEqual([
+    "parent",
+    "parent.constructor",
+    "parent.constructor.bar",
+    "parent.constructor.helper",
+    "parent.get x",
+    "parent.get x.nested",
+    "parent.set x",
+    "parent.set x.set",
+    "parent.run",
+  ]);
 });
 
 test("extracts a nested object-literal Function on an unnamed object", () => {
@@ -444,12 +765,16 @@ class Widget { run() { this.helper = function () {}; helper = () => {}; } }
   ]);
 });
 
-test("does not extract an assignment Function from a constructor", () => {
+test("extracts an assignment Function from a constructor", () => {
   const names = extractFunctions(
     "class Widget { constructor() { this.bar = () => {}; } run() {} }",
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["Widget.run"]);
+  expect(names).toEqual([
+    "Widget.constructor",
+    "Widget.constructor.bar",
+    "Widget.run",
+  ]);
 });
 
 test("does not count object-literal Decision points on the parent", () => {
@@ -479,6 +804,30 @@ test("does not count object-literal Decision points on the parent", () => {
   ).toEqual([
     { name: "parent", complexity: 1 },
     { name: "parent.run", complexity: 2 },
+  ]);
+});
+
+test("does not count a nested assignment Function's Decision points on the constructor", () => {
+  expect(
+    extractFunctions(
+      "class Widget { constructor(x: boolean) { this.bar = () => { if (x) { return 1; } }; } }",
+      "src/widget.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "Widget.constructor", complexity: 1 },
+    { name: "Widget.constructor.bar", complexity: 2 },
+  ]);
+});
+
+test("does not count object-literal accessor Decision points on the parent", () => {
+  expect(
+    extractFunctions(
+      "function parent(x: boolean) { const api = { get hidden() { if (x) return 1; return 0; } }; }",
+      "src/foo.ts",
+    ).map((fn) => ({ name: fn.name, complexity: fn.complexity })),
+  ).toEqual([
+    { name: "parent", complexity: 1 },
+    { name: "parent.get hidden", complexity: 2 },
   ]);
 });
 
@@ -639,12 +988,18 @@ test("extracts an identifier-assignment Function inside a loop body", () => {
   expect(names).toEqual(["parent", "parent.foo"]);
 });
 
-test("does not extract let or identifier-assignment Functions from a constructor", () => {
+test("extracts let and identifier-assignment Functions from a constructor", () => {
   const names = extractFunctions(
     "class Widget { constructor() { let foo = () => {}; foo = () => {}; this.bar ||= () => {}; } run() {} }",
     "src/foo.ts",
   ).map((fn) => fn.name);
-  expect(names).toEqual(["Widget.run"]);
+  expect(names).toEqual([
+    "Widget.constructor",
+    "Widget.constructor.foo",
+    "Widget.constructor.foo",
+    "Widget.constructor.bar",
+    "Widget.run",
+  ]);
 });
 
 test("extracts two Function rows for a let binding and a later write", () => {

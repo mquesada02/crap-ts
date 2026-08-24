@@ -66,6 +66,12 @@ Score only git-dirty TypeScript and JavaScript files in the working tree:
 crap-ts --changed
 ```
 
+Score only Functions that overlap a working-tree diff hunk:
+
+```bash
+crap-ts --changed-functions
+```
+
 ## Output
 
 ```
@@ -91,13 +97,14 @@ Unknown Coverage is `N/A`, never 0%. N/A rows sort after numeric CRAP.
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
     --json                    Print a JSON array of Function rows instead of the table.
     --changed                 Analyze git-dirty TypeScript and JavaScript files in the working tree.
+    --changed-functions       Analyze Functions in git-dirty files that overlap a working-tree diff hunk.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`.
 
 `--coverage-command` replaces the default Vitest command entirely.
 
-Path-fragment arguments keep a file if any fragment is a substring of its working-directory-relative path. `--changed` cannot be combined with path-fragments.
+Path-fragment arguments keep a file if any fragment is a substring of its working-directory-relative path. `--changed` and `--changed-functions` cannot be combined with each other or with path-fragments. Untracked files score every Function; a tracked dirty file with no hunks (chmod-only) scores none.
 
 Analyzed extensions: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`. Skipped directories: `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`. Test files (`*.test.*`, `*.spec.*`, `__tests__/`) are skipped.
 
@@ -121,7 +128,7 @@ CRAP(fn) = CC² × (1 − coverage)³ + CC
 | Code | Meaning |
 |------|---------|
 | 0    | Success, including empty selection |
-| 1    | Usage error, coverage-command failure, git status failure, unreadable source, or parse error |
+| 1    | Usage error, coverage-command failure, git status failure, git diff failure, unreadable source, or parse error |
 | 2    | Quality gate: `--threshold N` and the worst numeric CRAP is greater than N |
 
 The Quality gate is off when `--threshold` is omitted. If every row is N/A, max CRAP is 0 and the gate does not fail.

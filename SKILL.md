@@ -43,6 +43,9 @@ crap-ts --json --threshold 30
 
 # Score only git-dirty files in the working tree
 crap-ts --json --changed
+
+# Score only Functions that overlap a working-tree diff hunk
+crap-ts --json --changed-functions
 ```
 
 Unless `--use-existing-coverage` is set, `crap-ts` deletes stale Coverage artifacts, runs `npx vitest run --coverage --coverage.reporter=lcov --coverage.reportsDirectory=coverage`, then analyzes the results.
@@ -85,11 +88,12 @@ ok                             src/ok.ts                              1  100.0% 
     --threshold N             Exit 2 when the worst numeric CRAP is greater than N.
     --json                    Print a JSON array of Function rows instead of the table.
     --changed                 Analyze git-dirty TypeScript and JavaScript files in the working tree.
+    --changed-functions       Analyze Functions in git-dirty files that overlap a working-tree diff hunk.
 ```
 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`. `--coverage-command` replaces the default Vitest command entirely.
 
-Exit codes: `0` success (including empty selection); `1` usage error, coverage-command failure, git status failure, unreadable source, or parse error; `2` Quality gate. `--changed` cannot be combined with path-fragments.
+Exit codes: `0` success (including empty selection); `1` usage error, coverage-command failure, git status failure, git diff failure, unreadable source, or parse error; `2` Quality gate. `--changed` and `--changed-functions` cannot be combined with each other or with path-fragments. Untracked files score every Function; a tracked dirty file with no hunks (chmod-only) scores none.
 
 ## Interpreting Scores
 
@@ -102,7 +106,7 @@ Exit codes: `0` success (including empty selection); `1` usage error, coverage-c
 ## How It Works
 
 1. Unless `--use-existing-coverage`, deletes the reports directory that would hold the LCOV file and runs the coverage command with inherited stdio
-2. Finds `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` files, skipping `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`, and tests. With `--changed`, candidates come from `git status` instead of a full walk.
+2. Finds `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` files, skipping `node_modules`, `dist`, `build`, `coverage`, `.git`, `target`, and tests. With `--changed` or `--changed-functions`, candidates come from `git status` instead of a full walk. `--changed-functions` then keeps Functions whose lines overlap a `git diff HEAD -U0` hunk.
 3. Extracts Functions (declarations, class instance/static Functions, `const`/`let`/`var`-bound arrows/functions, object-literal methods, function-valued properties, property assignments, and identifier assignments (including logical assignment to identifiers and properties)) with line ranges
 4. Computes cyclomatic complexity from Decision points (`if`, loops, `switch` cases, `catch`, ternary, `&&` `||` `??`, optional chain, logical assignment)
 5. Reads LCOV for per-Function line Coverage

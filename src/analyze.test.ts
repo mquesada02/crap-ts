@@ -106,6 +106,7 @@ test("a root that is a file rejects naming the path", async () => {
   const root = join(parent, "file.ts");
   await expect(analyze({ root, lcovPath })).rejects.toThrow("not a directory");
   await expect(analyze({ root, lcovPath })).rejects.toThrow(root);
+  await expect(analyze({ root, lcovPath, files: [] })).rejects.toThrow(root);
 });
 
 test("omitted files discovers every analysable file under root, skipping tests and build dirs", async () => {

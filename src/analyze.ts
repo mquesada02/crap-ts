@@ -25,23 +25,23 @@ import { scoreFunctions } from "./score.js";
 
 export type CrapRow = CrapEntry & { file: string };
 
-export type AnalyzeOptions = {
+export type AnalyzeInput = {
   root: string;
   lcovPath: string;
   files?: string[];
 };
 
-export async function analyze(options: AnalyzeOptions): Promise<CrapRow[]> {
+export async function analyze(options: AnalyzeInput): Promise<CrapRow[]> {
   const root = resolve(options.root);
   const lookup = await exactLookup(root, options.lcovPath);
   const files =
     options.files === undefined
-      ? discoverFiles(root)
+      ? discoverUnderRoot(root)
       : selectListedFiles(root, options.files);
   const rows: CrapRow[] = [];
   for (const file of files) {
     const source = await readSource(root, file);
-    for (const entry of scoreFunctions(parseFunctions(source, file), lookup)) {
+    for (const entry of scoreFunctions(extractFunctions(source, file), lookup)) {
       rows.push({ file, ...entry });
     }
   }
@@ -52,11 +52,12 @@ async function exactLookup(
   root: string,
   lcovPath: string,
 ): Promise<CoverageLookup> {
+  const lcovFile = resolve(root, lcovPath);
   let text: string;
   try {
-    text = await readFile(resolve(root, lcovPath), "utf8");
+    text = await readFile(lcovFile, "utf8");
   } catch (error) {
-    throw new Error(`cannot read LCOV file ${lcovPath}: ${describe(error)}`);
+    throw new Error(`cannot read LCOV file ${lcovFile}: ${describe(error)}`);
   }
   const byAbsolutePath = new Map<string, Map<number, number>>();
   for (const [sourcePath, lines] of parseLcov(text)) {
@@ -70,7 +71,7 @@ async function exactLookup(
     );
 }
 
-function discoverFiles(root: string): string[] {
+function discoverUnderRoot(root: string): string[] {
   const found: string[] = [];
   collectFiles(root, { readdir: readdirWithTypes, stat: statSync }, found, root);
   return [...new Set(found.map((file) => posixify(relative(root, file))))];
@@ -85,7 +86,7 @@ function selectListedFiles(root: string, listed: string[]): string[] {
   for (const entry of listed) {
     const absolute = resolve(root, entry);
     const file = posixify(relative(root, absolute));
-    if (file === ".." || file.startsWith("../") || isAbsolute(file)) {
+    if (isOutsideRoot(file)) {
       throw new Error(`listed file is outside root: ${entry}`);
     }
     if (
@@ -98,6 +99,14 @@ function selectListedFiles(root: string, listed: string[]): string[] {
     selected.add(file);
   }
   return [...selected];
+}
+
+function isOutsideRoot(relativePath: string): boolean {
+  return (
+    relativePath === ".." ||
+    relativePath.startsWith("../") ||
+    isAbsolute(relativePath)
+  );
 }
 
 function assertRegularFile(absolute: string, entry: string): void {
@@ -123,10 +132,6 @@ async function readSource(root: string, file: string): Promise<string> {
   }
 }
 
-function parseFunctions(source: string, file: string) {
-  return extractFunctions(source, file);
-}
-
 function compareRows(a: CrapRow, b: CrapRow): number {
   return (
     compareStrings(a.file, b.file) ||
@@ -136,6 +141,7 @@ function compareRows(a: CrapRow, b: CrapRow): number {
   );
 }
 
+// Code-unit order on purpose: unlike localeCompare it does not depend on the locale.
 function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }

@@ -1,4 +1,4 @@
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { isMissingFile } from "./coverage.js";
 
 export type DiscoveryFs = {
@@ -26,10 +26,13 @@ const SOURCE_EXTENSIONS = [
   ".cjs",
 ];
 
+// When `testScope` is given, the `__tests__` check looks only at directories
+// below it, so a root that itself sits under `__tests__` still works.
 export function collectFiles(
   path: string,
   fs: DiscoveryFs,
   files: string[],
+  testScope?: string,
 ): void {
   let info;
   try {
@@ -41,7 +44,7 @@ export function collectFiles(
     throw error;
   }
   if (info.isFile()) {
-    if (isAnalyzableFile(dirname(path), basename(path))) {
+    if (isAnalyzableFile(scopedDirectory(dirname(path), testScope), basename(path))) {
       files.push(path);
     }
     return;
@@ -52,14 +55,21 @@ export function collectFiles(
   for (const entry of fs.readdir(path)) {
     if (entry.isDirectory()) {
       if (!SKIP_DIRECTORIES.has(entry.name)) {
-        collectFiles(resolve(path, entry.name), fs, files);
+        collectFiles(resolve(path, entry.name), fs, files, testScope);
       }
       continue;
     }
-    if (entry.isFile() && isAnalyzableFile(path, entry.name)) {
+    if (
+      entry.isFile() &&
+      isAnalyzableFile(scopedDirectory(path, testScope), entry.name)
+    ) {
       files.push(resolve(path, entry.name));
     }
   }
+}
+
+function scopedDirectory(directory: string, testScope: string | undefined): string {
+  return testScope === undefined ? directory : relative(testScope, directory);
 }
 
 export function isSkippedPath(file: string): boolean {

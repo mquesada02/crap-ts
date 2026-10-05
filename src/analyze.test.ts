@@ -114,6 +114,24 @@ test("a root that itself sits under a build directory still analyses its files",
   expect(rows.map((row) => row.file)).toEqual(["src/foo.ts"]);
 });
 
+test("a root that itself sits under a __tests__ directory still analyses its files", async () => {
+  const parent = project({ "__tests__/pkg/src/foo.ts": FOO, "__tests__/pkg/lcov.info": "" });
+  const root = join(parent, "__tests__/pkg");
+  expect(
+    (await analyze({ root, lcovPath: "lcov.info" })).map((row) => row.file),
+  ).toEqual(["src/foo.ts"]);
+  expect(
+    (await analyze({ root, lcovPath: "lcov.info", files: ["src/foo.ts"] })).map(
+      (row) => row.file,
+    ),
+  ).toEqual(["src/foo.ts"]);
+});
+
+test("a __tests__ directory below root is still skipped", async () => {
+  const root = project({ "src/__tests__/foo.ts": FOO, "lcov.info": "" });
+  expect(await analyze({ root, lcovPath: "lcov.info" })).toEqual([]);
+});
+
 test("files limits the analysis to the listed files", async () => {
   const root = project({ "src/foo.ts": FOO, "src/bar.ts": BAR, "lcov.info": "" });
   const rows = await analyze({ root, lcovPath: "lcov.info", files: ["src/bar.ts"] });

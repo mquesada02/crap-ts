@@ -72,7 +72,7 @@ async function exactLookup(
 
 function discoverFiles(root: string): string[] {
   const found: string[] = [];
-  collectFiles(root, { readdir: readdirWithTypes, stat: statSync }, found);
+  collectFiles(root, { readdir: readdirWithTypes, stat: statSync }, found, root);
   return [...new Set(found.map((file) => posixify(relative(root, file))))];
 }
 
@@ -90,7 +90,7 @@ function selectListedFiles(root: string, listed: string[]): string[] {
     }
     if (
       isSkippedPath(file) ||
-      !isAnalyzableFile(dirname(absolute), basename(absolute))
+      !isAnalyzableFile(dirname(file), basename(file))
     ) {
       continue;
     }

@@ -19,9 +19,9 @@ test("unknown Coverage yields unknown CRAP", () => {
 
 test("sorts Functions by numeric CRAP descending then N/A", () => {
   const sorted = sortByCrap([
-    { name: "low", namespace: "a.ts", complexity: 1, coverage: 100, crap: 1 },
-    { name: "unknown", namespace: "b.ts", complexity: 2, coverage: undefined, crap: undefined },
-    { name: "high", namespace: "c.ts", complexity: 5, coverage: 0, crap: 30 },
+    { name: "low", namespace: "a.ts", startLine: 1, endLine: 1, complexity: 1, coverage: 100, crap: 1 },
+    { name: "unknown", namespace: "b.ts", startLine: 1, endLine: 1, complexity: 2, coverage: undefined, crap: undefined },
+    { name: "high", namespace: "c.ts", startLine: 1, endLine: 1, complexity: 5, coverage: 0, crap: 30 },
   ]);
   expect(sorted.map((entry) => entry.name)).toEqual(["high", "low", "unknown"]);
 });
@@ -31,6 +31,8 @@ test("prints Uncle Bob table with Function, Namespace, CC, Cov%, and CRAP", () =
     {
       name: "foo",
       namespace: "src/foo.ts",
+      startLine: 1,
+      endLine: 5,
       complexity: 3,
       coverage: 85,
       crap: 4.5,
@@ -38,6 +40,8 @@ test("prints Uncle Bob table with Function, Namespace, CC, Cov%, and CRAP", () =
     {
       name: "bar",
       namespace: "src/bar.ts",
+      startLine: 1,
+      endLine: 3,
       complexity: 2,
       coverage: undefined,
       crap: undefined,
@@ -66,6 +70,8 @@ test("formatJson emits pretty rows with null Coverage and full-precision numbers
       {
         name: "Widget.run",
         namespace: "src/widget.ts",
+        startLine: 10,
+        endLine: 20,
         complexity: 4,
         coverage: 50,
         crap: 5.5,
@@ -73,6 +79,8 @@ test("formatJson emits pretty rows with null Coverage and full-precision numbers
       {
         name: "unknown",
         namespace: "src/missing.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 2,
         coverage: undefined,
         crap: undefined,
@@ -82,6 +90,8 @@ test("formatJson emits pretty rows with null Coverage and full-precision numbers
   {
     "function": "Widget.run",
     "namespace": "src/widget.ts",
+    "startLine": 10,
+    "endLine": 20,
     "cc": 4,
     "coverage": 50,
     "crap": 5.5
@@ -89,6 +99,8 @@ test("formatJson emits pretty rows with null Coverage and full-precision numbers
   {
     "function": "unknown",
     "namespace": "src/missing.ts",
+    "startLine": 1,
+    "endLine": 3,
     "cc": 2,
     "coverage": null,
     "crap": null
@@ -102,6 +114,8 @@ test("formatJson does not omit unknown Coverage keys or round numbers", () => {
     {
       name: "foo",
       namespace: "src/foo.ts",
+      startLine: 1,
+      endLine: 5,
       complexity: 3,
       coverage: 100 / 3,
       crap: 4 + 1 / 8,
@@ -110,6 +124,8 @@ test("formatJson does not omit unknown Coverage keys or round numbers", () => {
   const [row] = JSON.parse(document) as {
     function: string;
     namespace: string;
+    startLine: number;
+    endLine: number;
     cc: number;
     coverage: number | null;
     crap: number | null;
@@ -117,6 +133,8 @@ test("formatJson does not omit unknown Coverage keys or round numbers", () => {
   expect(Object.keys(row ?? {})).toEqual([
     "function",
     "namespace",
+    "startLine",
+    "endLine",
     "cc",
     "coverage",
     "crap",

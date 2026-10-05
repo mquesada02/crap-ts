@@ -59,6 +59,8 @@ Unless `--use-existing-coverage` is set, `crap-ts` deletes stale Coverage artifa
   {
     "function": "risky",
     "namespace": "src/risky.ts",
+    "startLine": 3,
+    "endLine": 20,
     "cc": 5,
     "coverage": 0,
     "crap": 30
@@ -94,6 +96,24 @@ ok                             src/ok.ts                              1  100.0% 
 A non-default `--lcov` requires `--use-existing-coverage` or `--coverage-command`. `--coverage-command` replaces the default Vitest command entirely.
 
 Exit codes: `0` success (including empty selection); `1` usage error, coverage-command failure, git status failure, git diff failure, unreadable source, or parse error; `2` Quality gate. `--changed` and `--changed-functions` cannot be combined with each other or with path-fragments. Untracked files score every Function; a tracked dirty file with no hunks (chmod-only) scores none.
+
+### Library API
+
+`@mquesada02/crap-ts` also exports one pure function, `analyze`. It never deletes files and never runs commands: run your coverage command first.
+
+```ts
+import { analyze, type CrapRow } from "@mquesada02/crap-ts";
+
+const rows: CrapRow[] = await analyze({ root: "/path/to/package", lcovPath: "coverage/lcov.info" });
+```
+
+- `root`: directory to analyze. A relative `lcovPath` resolves against it.
+- `files` (optional, paths relative to `root`): limits the analysis. Omitted means every analyzable file under `root`; an empty list means none.
+- Each row has `file` (relative to `root`, POSIX), `name`, `namespace`, `startLine`, `endLine` (1-based), `complexity`, `coverage`, and `crap`. Unknown Coverage is `undefined`.
+- Rows are ordered by `file`, then `startLine`. LCOV `SF:` entries match exactly after resolving against `root`.
+- It rejects with an Error when `root` does not exist or is not a directory, when the LCOV file cannot be read, or when a listed file is missing, outside `root`, or fails to parse.
+
+`typescript` (`>=5.9 <6.1`) is a peer dependency: install it next to `@mquesada02/crap-ts`.
 
 ## Interpreting Scores
 

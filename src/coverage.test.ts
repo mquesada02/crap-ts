@@ -76,6 +76,8 @@ end_of_record
       return {
         name: fn.name,
         namespace: fn.namespace,
+        startLine: fn.startLine,
+        endLine: fn.endLine,
         complexity: fn.complexity,
         coverage: coveragePct,
         crap: crapScore(fn.complexity, coveragePct),

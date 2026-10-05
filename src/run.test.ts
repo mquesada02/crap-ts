@@ -279,6 +279,8 @@ test("prints a CRAP report from existing LCOV and exits 0", () => {
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: 100,
         crap: 1,
@@ -301,6 +303,8 @@ test("missing LCOV with --use-existing-coverage warns and scores N/A", () => {
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: undefined,
         crap: undefined,
@@ -508,6 +512,8 @@ test("scores Coverage produced by the coverage command", () => {
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: 100,
         crap: 1,
@@ -531,6 +537,8 @@ test("missing LCOV after a coverage run warns and scores N/A", () => {
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: undefined,
         crap: undefined,
@@ -599,6 +607,8 @@ test("--json prints a JSON array instead of the table", () => {
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: 100,
         crap: 1,
@@ -624,6 +634,8 @@ test("missing LCOV with --json warns and emits null Coverage", () => {
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: undefined,
         crap: undefined,
@@ -648,6 +660,8 @@ test("--json with --threshold N prints JSON then fails the Quality gate", () => 
       {
         name: "foo",
         namespace: "src/foo.ts",
+        startLine: 1,
+        endLine: 3,
         complexity: 1,
         coverage: 100,
         crap: 1,

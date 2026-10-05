@@ -72,6 +72,10 @@ Score only Functions that overlap a working-tree diff hunk:
 crap-ts --changed-functions
 ```
 
+## Library
+
+`@mquesada02/crap-ts` exports one pure function, `analyze({ root, lcovPath, files? })`, which returns `CrapRow[]` (`file`, `name`, `namespace`, `startLine`, `endLine`, `complexity`, `coverage`, `crap`). It never deletes files or runs commands; produce the LCOV file first. See `SKILL.md` for the full contract. `typescript` (`>=5.9 <6.1`) is a peer dependency, so install it next to the package.
+
 ## Output
 
 ```

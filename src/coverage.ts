@@ -2,6 +2,12 @@ import { readFileSync } from "node:fs";
 
 export type LcovCoverage = Map<string, Map<number, number>>;
 
+export type CoverageLookup = (
+  namespace: string,
+  startLine: number,
+  endLine: number,
+) => number | undefined;
+
 export function readLcov(path: string): LcovCoverage | undefined {
   try {
     return parseLcov(readFileSync(path, "utf8"));
@@ -49,7 +55,14 @@ export function coverageForRange(
   startLine: number,
   endLine: number,
 ): number | undefined {
-  const lines = linesForFile(coverage, filePath);
+  return coverageForLines(linesForFile(coverage, filePath), startLine, endLine);
+}
+
+export function coverageForLines(
+  lines: Map<number, number> | undefined,
+  startLine: number,
+  endLine: number,
+): number | undefined {
   if (lines === undefined) {
     return undefined;
   }

@@ -1,6 +1,8 @@
 export type CrapEntry = {
   name: string;
   namespace: string;
+  startLine: number;
+  endLine: number;
   complexity: number;
   coverage: number | undefined;
   crap: number | undefined;
@@ -36,6 +38,8 @@ export function formatJson(entries: readonly CrapEntry[]): string {
   const rows = entries.map((entry) => ({
     function: entry.name,
     namespace: entry.namespace,
+    startLine: entry.startLine,
+    endLine: entry.endLine,
     cc: entry.complexity,
     coverage: entry.coverage ?? null,
     crap: entry.crap ?? null,

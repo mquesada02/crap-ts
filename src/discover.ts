@@ -52,6 +52,7 @@ export function collectFiles(
   if (!info.isDirectory()) {
     return;
   }
+  const testDirectory = scopedDirectory(path, testScope);
   for (const entry of fs.readdir(path)) {
     if (entry.isDirectory()) {
       if (!SKIP_DIRECTORIES.has(entry.name)) {
@@ -61,7 +62,7 @@ export function collectFiles(
     }
     if (
       entry.isFile() &&
-      isAnalyzableFile(scopedDirectory(path, testScope), entry.name)
+      isAnalyzableFile(testDirectory, entry.name)
     ) {
       files.push(resolve(path, entry.name));
     }

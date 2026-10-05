@@ -73,12 +73,13 @@ async function exactLookup(
 
 function discoverUnderRoot(root: string): string[] {
   const found: string[] = [];
-  collectFiles(root, { readdir: readdirWithTypes, stat: statSync }, found, root);
-  return [...new Set(found.map((file) => posixify(relative(root, file))))];
-}
-
-function readdirWithTypes(path: string) {
-  return readdirSync(path, { withFileTypes: true });
+  collectFiles(
+    root,
+    { readdir: (path) => readdirSync(path, { withFileTypes: true }), stat: statSync },
+    found,
+    root,
+  );
+  return found.map((file) => posixify(relative(root, file)));
 }
 
 function selectListedFiles(root: string, listed: string[]): string[] {

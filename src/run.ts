@@ -11,17 +11,24 @@ import { HELP_MESSAGE, type AnalyzeOptions, type CliResult } from "./cli.js";
 import {
   coverageForRange,
   isMissingFile,
+  type CoverageLookup,
   parseLcov,
   type LcovCoverage,
 } from "./coverage.js";
 import {
-  crapScore,
   formatJson,
   formatReport,
   sortByCrap,
   type CrapEntry,
 } from "./crap.js";
+import {
+  collectFiles,
+  isAnalyzableFile,
+  isSkippedPath,
+  posixify,
+} from "./discover.js";
 import { extractFunctions, type ExtractedFunction } from "./functions.js";
+import { scoreFunctions } from "./score.js";
 
 export type RunHost = {
   cwd: string;
@@ -106,20 +113,20 @@ export function run(options: CliResult, host: RunHost): number {
     }
   }
   const coverage = loadCoverage(options, host);
+  const lookup: CoverageLookup = (namespace, startLine, endLine) =>
+    coverage === undefined
+      ? undefined
+      : coverageForRange(coverage, namespace, startLine, endLine);
   const entries: CrapEntry[] = [];
   if (keptFunctions !== undefined) {
-    for (const fn of keptFunctions) {
-      entries.push(toEntry(fn, coverage));
-    }
+    entries.push(...scoreFunctions(keptFunctions, lookup));
   } else {
     for (const file of files) {
       const functions = readFunctions(file, host);
       if (functions === undefined) {
         return 1;
       }
-      for (const fn of functions) {
-        entries.push(toEntry(fn, coverage));
-      }
+      entries.push(...scoreFunctions(functions, lookup));
     }
   }
   const sorted = sortByCrap(entries);
@@ -161,23 +168,6 @@ function emptySelection(options: AnalyzeOptions, host: RunHost): number {
     options.json ? formatJson([]) : "No source files to analyze.\n",
   );
   return 0;
-}
-
-function toEntry(
-  fn: ExtractedFunction,
-  coverage: LcovCoverage | undefined,
-): CrapEntry {
-  const coveragePct =
-    coverage === undefined
-      ? undefined
-      : coverageForRange(coverage, fn.namespace, fn.startLine, fn.endLine);
-  return {
-    name: fn.name,
-    namespace: fn.namespace,
-    complexity: fn.complexity,
-    coverage: coveragePct,
-    crap: crapScore(fn.complexity, coveragePct),
-  };
 }
 
 function joinChangedFunctions(
@@ -291,26 +281,6 @@ function loadCoverage(
   }
 }
 
-const SKIP_DIRECTORIES = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  "coverage",
-  ".git",
-  "target",
-]);
-
-const SOURCE_EXTENSIONS = [
-  ".ts",
-  ".tsx",
-  ".mts",
-  ".cts",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-];
-
 type DirtyFile = { path: string; untracked: boolean };
 
 function discoverChangedFiles(
@@ -414,66 +384,4 @@ function discoverFiles(options: AnalyzeOptions, host: RunHost): string[] {
   return unique.filter((file) =>
     options.pathFragments.some((fragment) => file.includes(fragment)),
   );
-}
-
-function collectFiles(path: string, host: RunHost, files: string[]): void {
-  let info;
-  try {
-    info = host.stat(path);
-  } catch (error) {
-    if (isMissingFile(error)) {
-      return;
-    }
-    throw error;
-  }
-  if (info.isFile()) {
-    if (isAnalyzableFile(dirname(path), basename(path))) {
-      files.push(path);
-    }
-    return;
-  }
-  if (!info.isDirectory()) {
-    return;
-  }
-  for (const entry of host.readdir(path)) {
-    if (entry.isDirectory()) {
-      if (!SKIP_DIRECTORIES.has(entry.name)) {
-        collectFiles(resolve(path, entry.name), host, files);
-      }
-      continue;
-    }
-    if (entry.isFile() && isAnalyzableFile(path, entry.name)) {
-      files.push(resolve(path, entry.name));
-    }
-  }
-}
-
-function isSkippedPath(file: string): boolean {
-  return posixify(file).split("/").some((segment) => SKIP_DIRECTORIES.has(segment));
-}
-
-function isAnalyzableFile(directory: string, name: string): boolean {
-  return isSourceFile(name) && !isTestFile(directory, name);
-}
-
-function isSourceFile(name: string): boolean {
-  if (
-    name.endsWith(".d.ts") ||
-    name.endsWith(".d.mts") ||
-    name.endsWith(".d.cts")
-  ) {
-    return false;
-  }
-  return SOURCE_EXTENSIONS.some((extension) => name.endsWith(extension));
-}
-
-function isTestFile(directory: string, name: string): boolean {
-  if (name.includes(".test.") || name.includes(".spec.")) {
-    return true;
-  }
-  return posixify(directory).split("/").includes("__tests__");
-}
-
-function posixify(path: string): string {
-  return path.replaceAll("\\", "/");
 }

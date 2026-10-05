@@ -33,6 +33,7 @@ export type AnalyzeInput = {
 
 export async function analyze(options: AnalyzeInput): Promise<CrapRow[]> {
   const root = resolve(options.root);
+  assertDirectory(root);
   const lookup = await exactLookup(root, options.lcovPath);
   const files =
     options.files === undefined
@@ -100,6 +101,21 @@ function selectListedFiles(root: string, listed: string[]): string[] {
     selected.add(file);
   }
   return [...selected];
+}
+
+function assertDirectory(root: string): void {
+  let isDirectory: boolean;
+  try {
+    isDirectory = statSync(root).isDirectory();
+  } catch (error) {
+    if (isMissingFile(error)) {
+      throw new Error(`root does not exist: ${root}`);
+    }
+    throw new Error(`cannot read root ${root}: ${describe(error)}`);
+  }
+  if (!isDirectory) {
+    throw new Error(`root is not a directory: ${root}`);
+  }
 }
 
 function isOutsideRoot(relativePath: string): boolean {

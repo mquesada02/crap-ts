@@ -91,6 +91,23 @@ test("a missing LCOV file rejects even when files is empty", async () => {
   ).rejects.toThrow("nope.info");
 });
 
+test("a root that does not exist rejects naming the path, with files omitted or given", async () => {
+  const parent = project({ "lcov.info": "" });
+  const lcovPath = join(parent, "lcov.info");
+  const root = join(parent, "gone");
+  await expect(analyze({ root, lcovPath })).rejects.toThrow("root does not exist");
+  await expect(analyze({ root, lcovPath })).rejects.toThrow(root);
+  await expect(analyze({ root, lcovPath, files: [] })).rejects.toThrow(root);
+});
+
+test("a root that is a file rejects naming the path", async () => {
+  const parent = project({ "file.ts": FOO, "lcov.info": "" });
+  const lcovPath = join(parent, "lcov.info");
+  const root = join(parent, "file.ts");
+  await expect(analyze({ root, lcovPath })).rejects.toThrow("not a directory");
+  await expect(analyze({ root, lcovPath })).rejects.toThrow(root);
+});
+
 test("omitted files discovers every analysable file under root, skipping tests and build dirs", async () => {
   const root = project({
     "src/foo.ts": FOO,

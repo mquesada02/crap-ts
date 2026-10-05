@@ -111,7 +111,7 @@ const rows: CrapRow[] = await analyze({ root: "/path/to/package", lcovPath: "cov
 - `files` (optional, paths relative to `root`): limits the analysis. Omitted means every analyzable file under `root`; an empty list means none.
 - Each row has `file` (relative to `root`, POSIX), `name`, `namespace`, `startLine`, `endLine` (1-based), `complexity`, `coverage`, and `crap`. Unknown Coverage is `undefined`.
 - Rows are ordered by `file`, then `startLine`. LCOV `SF:` entries match exactly after resolving against `root`.
-- It rejects with an Error when the LCOV file cannot be read, or when a listed file is missing, outside `root`, or fails to parse.
+- It rejects with an Error when `root` does not exist or is not a directory, when the LCOV file cannot be read, or when a listed file is missing, outside `root`, or fails to parse.
 
 `typescript` (`>=5.9 <6.1`) is a peer dependency: install it next to `@mquesada02/crap-ts`.
 
